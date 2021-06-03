@@ -2,48 +2,43 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 
 	"github.com/go-pg/pg/v10"
-	"github.com/go-pg/pg/v10/orm"
 )
 
 func main() {
 	newStocks, err := getStocks()
 	if err != nil {
-		log.Fatalln(err)
+		log.Panic(err)
 	}
 
-	if len(newStocks) == 0 {
-		fmt.Println("No data.")
-		return
-	}
-
-	savedStocks, err := queryAllStockCodeAndLastUpdate()
+	db := pg.Connect(&pgOpts)
+	defer db.Close()
+	savedStocks, err := queryAllStockCodeAndLastUpdate(db)
 	if err != nil {
-		log.Fatalln(err)
+		log.Panic(err)
 	}
 
 	facets, err := filter(newStocks, savedStocks)
 	if err != nil {
-		log.Fatalln(err)
+		log.Panic(err)
 	}
 
 	inserted := 0
-	ormRes, err := insert(facets.Active)
+	ormRes, err := db.Model(&facets.Active).Insert()
 	if err != nil {
-		log.Println(err)
+		log.Print(err)
 	} else {
 		inserted = ormRes.RowsReturned()
 	}
 
-	fmt.Printf("Received: %d, Active: %d, Inserted: %d\n", len(newStocks), len(facets.Active), inserted)
-	fmt.Printf("New: %d\n", len(facets.New))
+	log.Printf("Received: %d, Active: %d, Inserted: %d\n", len(newStocks), len(facets.Active), inserted)
+	log.Printf("New: %d\n", len(facets.New))
 	printJson(facets.New)
-	fmt.Printf("Stale: %d\n", len(facets.Stale))
+	log.Printf("Stale: %d\n", len(facets.Stale))
 	printJson(facets.Stale)
 }
 
@@ -66,11 +61,8 @@ func getStocks() ([]Stock, error) {
 	return stocks, err
 }
 
-func queryAllStockCodeAndLastUpdate() ([]Stock, error) {
+func queryAllStockCodeAndLastUpdate(db *pg.DB) ([]Stock, error) {
 	var stocks []Stock
-
-	db := pg.Connect(&pgOpts)
-	defer db.Close()
 
 	err := db.Model(&stocks).
 		Column("code").
@@ -81,13 +73,6 @@ func queryAllStockCodeAndLastUpdate() ([]Stock, error) {
 	return stocks, err
 }
 
-func insert(stocks []Stock) (orm.Result, error) {
-	db := pg.Connect(&pgOpts)
-	defer db.Close()
-
-	return db.Model(&stocks).Insert()
-}
-
 func printJson(stocks []Stock) {
 	if len(stocks) == 0 {
 		return
@@ -95,8 +80,8 @@ func printJson(stocks []Stock) {
 
 	marshaled, err := json.Marshal(stocks)
 	if err != nil {
-		log.Println(err)
+		log.Print(err)
 	} else {
-		fmt.Println(string(marshaled))
+		log.Print(string(marshaled))
 	}
 }
