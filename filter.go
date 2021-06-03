@@ -21,7 +21,7 @@ func filter(newStocks []Stock, oldStocks []Stock) (FilterResult, error) {
 	res.Stale = make([]Stock, 0)
 	res.New = make([]Stock, 0)
 
-	lastUpdates := make(map[string]string)
+	lastUpdates := make(map[string]string, len(oldStocks))
 	for _, stock := range oldStocks {
 		lastUpdates[stock.Code] = stock.LastUpdate
 	}
