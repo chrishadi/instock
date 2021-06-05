@@ -20,30 +20,30 @@ func (m fakeBody) Close() error {
 	return nil
 }
 
-func TestReadResponseGivenStatusCodeIs200(t *testing.T) {
-	body := fakeBody{content: []byte("ok")}
-	resp := http.Response{StatusCode: 200, Body: body}
+func TestReadResponseGivenStatusCodeIs200ThenOk(t *testing.T) {
+	ok := []byte("ok")
+	resp := http.Response{StatusCode: 200, Body: fakeBody{content: ok}}
 
 	buffer, err := readResponse(&resp)
 
 	if err != nil {
 		t.Errorf("Expect error to be nil, got: %v", err)
 	}
-	if !bytes.Equal(buffer, body.content) {
-		t.Errorf("Expect 'buffer' to equal %v, got: %v", body.content, buffer)
+	if !bytes.Equal(buffer, ok) {
+		t.Errorf("Expect 'buffer' to equal %v, got: %v", ok, buffer)
 	}
 }
 
-func TestReadResponseGivenStatusCodeIsNot200(t *testing.T) {
-	body := fakeBody{content: []byte("oops")}
-	resp := http.Response{StatusCode: 504, Body: body}
+func TestReadResponseGivenStatusCodeIsNot200ThenError(t *testing.T) {
+	oops := []byte("oops")
+	resp := http.Response{StatusCode: 504, Body: fakeBody{content: oops}}
 
 	buffer, err := readResponse(&resp)
 
 	if err == nil {
 		t.Error("Expect error not to be nil")
 	}
-	if !bytes.Equal(buffer, body.content) {
-		t.Errorf("Expect 'buffer' to equal %v, got: %v", body.content, buffer)
+	if !bytes.Equal(buffer, oops) {
+		t.Errorf("Expect 'buffer' to equal %v, got: %v", oops, buffer)
 	}
 }
