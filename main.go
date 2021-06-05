@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -37,9 +38,9 @@ func main() {
 
 	log.Printf("Received: %d, Active: %d, Inserted: %d\n", len(newStocks), len(facets.Active), inserted)
 	log.Printf("New: %d\n", len(facets.New))
-	printJson(facets.New)
+	logJson(facets.New)
 	log.Printf("Stale: %d\n", len(facets.Stale))
-	printJson(facets.Stale)
+	logJson(facets.Stale)
 }
 
 func getStocks() ([]Stock, error) {
@@ -51,7 +52,7 @@ func getStocks() ([]Stock, error) {
 	}
 	defer resp.Body.Close()
 
-	bytes, err := ioutil.ReadAll(resp.Body)
+	bytes, err := readResponse(resp)
 	if err != nil {
 		return stocks, err
 	}
@@ -59,6 +60,15 @@ func getStocks() ([]Stock, error) {
 	err = json.Unmarshal(bytes, &stocks)
 
 	return stocks, err
+}
+
+func readResponse(resp *http.Response) ([]byte, error) {
+	buffer, err := ioutil.ReadAll(resp.Body)
+	if err == nil && resp.StatusCode != 200 {
+		err = fmt.Errorf("Status: %d, Body: %s", resp.StatusCode, buffer)
+	}
+
+	return buffer, err
 }
 
 func queryAllStockCodeAndLastUpdate(db *pg.DB) ([]Stock, error) {
@@ -73,7 +83,7 @@ func queryAllStockCodeAndLastUpdate(db *pg.DB) ([]Stock, error) {
 	return stocks, err
 }
 
-func printJson(stocks []Stock) {
+func logJson(stocks []Stock) {
 	if len(stocks) == 0 {
 		return
 	}
