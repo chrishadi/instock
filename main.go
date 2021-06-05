@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	newStocks, err := getStocks()
+	newStocks, err := getStocks(stockApiUrl, http.Get, json.Unmarshal)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -43,10 +43,11 @@ func main() {
 	logJson(facets.Stale)
 }
 
-func getStocks() ([]Stock, error) {
-	var stocks []Stock
+type httpGetFn func(string) (*http.Response, error)
+type jsonUnmarshalFn func(data []byte, v interface{}) error
 
-	resp, err := http.Get(stockApiUrl)
+func getStocks(url string, httpGet httpGetFn, jsonUnmarshal jsonUnmarshalFn) (stocks []Stock, err error) {
+	resp, err := httpGet(url)
 	if err != nil {
 		return stocks, err
 	}
@@ -57,7 +58,7 @@ func getStocks() ([]Stock, error) {
 		return stocks, err
 	}
 
-	err = json.Unmarshal(bytes, &stocks)
+	err = jsonUnmarshal(bytes, &stocks)
 
 	return stocks, err
 }
@@ -71,10 +72,8 @@ func readResponse(resp *http.Response) ([]byte, error) {
 	return buffer, err
 }
 
-func queryAllStockCodeAndLastUpdate(db *pg.DB) ([]Stock, error) {
-	var stocks []Stock
-
-	err := db.Model(&stocks).
+func queryAllStockCodeAndLastUpdate(db *pg.DB) (stocks []Stock, err error) {
+	err = db.Model(&stocks).
 		Column("code").
 		ColumnExpr("max(last_update) AS last_update").
 		Group("code").
