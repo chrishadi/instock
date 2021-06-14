@@ -1,13 +1,14 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"reflect"
 	"testing"
+
+	"github.com/chrishadi/instock/common"
 )
 
 type fakeBody struct {
@@ -23,7 +24,7 @@ func (m fakeBody) Close() error {
 	return nil
 }
 
-func TestGetStockGivenHttpGetReturnProperJson(t *testing.T) {
+func TestGetStocksGivenHttpGetReturnProperJson(t *testing.T) {
 	jsonb := []byte(`[{"Code":"BBCA","Last":32000.0}]`)
 	resp := http.Response{StatusCode: 200, Body: fakeBody{content: jsonb}}
 	httpGet := func(url string) (*http.Response, error) {
@@ -31,7 +32,7 @@ func TestGetStockGivenHttpGetReturnProperJson(t *testing.T) {
 	}
 	expected := []Stock{{Code: "BBCA", Last: 32000.0}}
 
-	actual, err := getStocks("", httpGet, json.Unmarshal)
+	actual, err := getStocks("", httpGet, common.ReadResponse, json.Unmarshal)
 
 	if err != nil {
 		t.Error("Expect error to be nil, got", err)
@@ -41,19 +42,35 @@ func TestGetStockGivenHttpGetReturnProperJson(t *testing.T) {
 	}
 }
 
-func TestGetStockGivenHttpGetReturnError(t *testing.T) {
+func TestGetStocksGivenHttpGetReturnError(t *testing.T) {
 	httpGet := func(url string) (resp *http.Response, err error) {
 		return nil, errors.New("")
 	}
 
-	_, err := getStocks("", httpGet, nil)
+	_, err := getStocks("", httpGet, nil, nil)
 
 	if err == nil {
 		t.Error("Expect error not to be nil")
 	}
 }
 
-func TestGetStockGivenJsonUnmarshalReturnError(t *testing.T) {
+func TestGetStocksGivenReadResponseReturnError(t *testing.T) {
+	resp := http.Response{StatusCode: 200, Body: fakeBody{content: []byte{}}}
+	httpGet := func(url string) (*http.Response, error) {
+		return &resp, nil
+	}
+	readResponse := func(*http.Response) ([]byte, error) {
+		return nil, errors.New("")
+	}
+
+	_, err := getStocks("", httpGet, readResponse, nil)
+
+	if err == nil {
+		t.Error("Expect error not to be nil")
+	}
+}
+
+func TestGetStocksGivenJsonUnmarshalReturnError(t *testing.T) {
 	resp := http.Response{StatusCode: 200, Body: fakeBody{content: []byte{}}}
 	httpGet := func(url string) (*http.Response, error) {
 		return &resp, nil
@@ -62,37 +79,19 @@ func TestGetStockGivenJsonUnmarshalReturnError(t *testing.T) {
 		return errors.New("")
 	}
 
-	_, err := getStocks("", httpGet, jsonUnmarshal)
+	_, err := getStocks("", httpGet, common.ReadResponse, jsonUnmarshal)
 
 	if err == nil {
 		t.Error("Expect error not to be nil")
 	}
 }
 
-func TestReadResponseGivenStatusCodeIs200ThenOk(t *testing.T) {
-	ok := []byte("ok")
-	resp := http.Response{StatusCode: 200, Body: fakeBody{content: ok}}
+func TestExtractCode(t *testing.T) {
+	expected := []string{"A", "B"}
 
-	buffer, err := readResponse(&resp)
+	actual := extractCode([]Stock{{Code: "A"}, {Code: "B"}})
 
-	if err != nil {
-		t.Error("Expect error to be nil, got", err)
-	}
-	if !bytes.Equal(buffer, ok) {
-		t.Errorf("Expect 'buffer' to equal %v, got: %v", ok, buffer)
-	}
-}
-
-func TestReadResponseGivenStatusCodeIsNot200ThenError(t *testing.T) {
-	oops := []byte("oops")
-	resp := http.Response{StatusCode: 504, Body: fakeBody{content: oops}}
-
-	buffer, err := readResponse(&resp)
-
-	if err == nil {
-		t.Error("Expect error not to be nil")
-	}
-	if !bytes.Equal(buffer, oops) {
-		t.Errorf("Expect 'buffer' to equal %v, got %v", oops, buffer)
+	if !reflect.DeepEqual(actual, expected) {
+		t.Errorf("Expect %v, got %v", expected, actual)
 	}
 }

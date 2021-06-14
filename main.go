@@ -3,50 +3,58 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
+	"strings"
 
+	"github.com/chrishadi/instock/common"
+	"github.com/chrishadi/instock/tbot"
 	"github.com/go-pg/pg/v10"
 )
 
 func main() {
-	newStocks, err := getStocks(stockApiUrl, http.Get, json.Unmarshal)
+	bot := tbot.New(botToken, chatId, &tbot.BotOptions{
+		HttpPost:     http.Post,
+		JsonMarshal:  json.Marshal,
+		ReadResponse: common.ReadResponse,
+	})
+	sb := &strings.Builder{}
+	defer sendMessage(bot, sb)
+
+	newStocks, err := getStocks(stockApiUrl, http.Get, common.ReadResponse, json.Unmarshal)
 	if err != nil {
-		log.Panic(err)
+		panicws(sb, err)
 	}
 
 	db := pg.Connect(&pgOpts)
 	defer db.Close()
+
 	savedStocks, err := queryAllStockCodeAndLastUpdate(db)
 	if err != nil {
-		log.Panic(err)
+		panicws(sb, err)
 	}
 
 	facets, err := filter(newStocks, savedStocks)
 	if err != nil {
-		log.Panic(err)
+		panicws(sb, err)
 	}
 
 	inserted := 0
 	ormRes, err := db.Model(&facets.Active).Insert()
 	if err != nil {
-		log.Print(err)
+		logws(sb, err)
 	} else {
 		inserted = ormRes.RowsReturned()
 	}
 
-	log.Printf("Received: %d, Active: %d, Inserted: %d\n", len(newStocks), len(facets.Active), inserted)
-	log.Printf("New: %d\n", len(facets.New))
-	logJson(facets.New)
-	log.Printf("Stale: %d\n", len(facets.Stale))
-	logJson(facets.Stale)
+	logwsf(sb, "Received: %d, Active: %d, Inserted: %d\n", len(newStocks), len(facets.Active), inserted)
+	logwsf(sb, "New: %d\n", len(facets.New))
+	logws(sb, extractCode(facets.New))
+	logwsf(sb, "Stale: %d\n", len(facets.Stale))
+	logws(sb, extractCode(facets.Stale))
 }
 
-type httpGetFn func(string) (*http.Response, error)
-type jsonUnmarshalFn func(data []byte, v interface{}) error
-
-func getStocks(url string, httpGet httpGetFn, jsonUnmarshal jsonUnmarshalFn) (stocks []Stock, err error) {
+func getStocks(url string, httpGet common.HttpGetFn, readResponse common.ReadResponseFn, jsonUnmarshal common.JsonUnmarshalFn) (stocks []Stock, err error) {
 	resp, err := httpGet(url)
 	if err != nil {
 		return stocks, err
@@ -63,15 +71,6 @@ func getStocks(url string, httpGet httpGetFn, jsonUnmarshal jsonUnmarshalFn) (st
 	return stocks, err
 }
 
-func readResponse(resp *http.Response) ([]byte, error) {
-	buffer, err := ioutil.ReadAll(resp.Body)
-	if err == nil && resp.StatusCode != 200 {
-		err = fmt.Errorf("Status: %d, Body: %s", resp.StatusCode, buffer)
-	}
-
-	return buffer, err
-}
-
 func queryAllStockCodeAndLastUpdate(db *pg.DB) (stocks []Stock, err error) {
 	err = db.Model(&stocks).
 		Column("code").
@@ -82,15 +81,37 @@ func queryAllStockCodeAndLastUpdate(db *pg.DB) (stocks []Stock, err error) {
 	return stocks, err
 }
 
-func logJson(stocks []Stock) {
-	if len(stocks) == 0 {
-		return
+func extractCode(stocks []Stock) []string {
+	res := make([]string, len(stocks))
+	for i, stock := range stocks {
+		res[i] = stock.Code
 	}
+	return res
+}
 
-	marshaled, err := json.Marshal(stocks)
-	if err != nil {
-		log.Print(err)
-	} else {
-		log.Print(string(marshaled))
+func logws(b *strings.Builder, v interface{}) {
+	s := fmt.Sprintln(v)
+	log.Print(s)
+	b.WriteString(s)
+}
+
+func logwsf(b *strings.Builder, format string, v ...interface{}) {
+	s := fmt.Sprintf(format, v...)
+	log.Print(s)
+	b.WriteString(s)
+}
+
+func panicws(b *strings.Builder, v interface{}) {
+	s := fmt.Sprintln(v)
+	b.WriteString(s)
+	log.Panic(s)
+}
+
+func sendMessage(bot *tbot.Bot, b *strings.Builder) {
+	if bot != nil && b.Len() > 0 {
+		err := bot.SendMessage(b.String())
+		if err != nil {
+			log.Print(err)
+		}
 	}
 }
