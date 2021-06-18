@@ -102,7 +102,7 @@ func logwsf(b *strings.Builder, format string, v ...interface{}) {
 }
 
 func panicws(b *strings.Builder, v interface{}) {
-	s := fmt.Sprintln(v)
+	s := fmt.Sprint(v)
 	b.WriteString(s)
 	log.Panic(s)
 }

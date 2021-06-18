@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	dummyToken  = "api:token"
-	dummyChatId = 123
+	dummyChatId  = 123
+	dummyMessage = "dummyMessage"
+	dummyToken   = "api:token"
 )
 
 type fakeBody struct {
@@ -72,7 +73,7 @@ func TestSendMessageGivenHttpPostReturnOk(t *testing.T) {
 	opts := BotOptions{httpPost, json.Marshal, common.ReadResponse}
 
 	bot := New(dummyToken, dummyChatId, &opts)
-	err := bot.SendMessage("")
+	err := bot.SendMessage(dummyMessage)
 
 	if err != nil {
 		t.Error("Expect error to be nil, got", err)
@@ -87,7 +88,7 @@ func TestSendMessageGivenStatusCodeIsNot200(t *testing.T) {
 	opts := BotOptions{httpPost, json.Marshal, common.ReadResponse}
 
 	bot := New(dummyToken, dummyChatId, &opts)
-	err := bot.SendMessage("")
+	err := bot.SendMessage(dummyMessage)
 
 	if err == nil {
 		t.Error("Expect error not to be nil")
@@ -96,12 +97,12 @@ func TestSendMessageGivenStatusCodeIsNot200(t *testing.T) {
 
 func TestSendMessageGivenHttpPostReturnError(t *testing.T) {
 	httpPost := func(url, contentType string, body io.Reader) (*http.Response, error) {
-		return nil, errors.New("")
+		return nil, errors.New(dummyMessage)
 	}
 	opts := BotOptions{httpPost, json.Marshal, nil}
 
 	bot := New(dummyToken, dummyChatId, &opts)
-	err := bot.SendMessage("")
+	err := bot.SendMessage(dummyMessage)
 
 	if err == nil {
 		t.Error("Expect error not to be nil")
@@ -115,6 +116,15 @@ func TestSendMessageGivenJsonMarshalReturnError(t *testing.T) {
 	opts := BotOptions{nil, jsonMarshal, nil}
 
 	bot := New(dummyToken, dummyChatId, &opts)
+	err := bot.SendMessage(dummyMessage)
+
+	if err == nil {
+		t.Error("Expect error not to be nil")
+	}
+}
+
+func TestSendMessageGivenEmptyMessageReturnError(t *testing.T) {
+	bot := New(dummyToken, dummyChatId, &BotOptions{})
 	err := bot.SendMessage("")
 
 	if err == nil {

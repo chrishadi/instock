@@ -2,6 +2,7 @@ package tbot
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"github.com/chrishadi/instock/common"
@@ -42,6 +43,10 @@ func (bot Bot) ApiUrlFor(command string) string {
 }
 
 func (bot Bot) SendMessage(text string) error {
+	if len(text) == 0 {
+		return errors.New("Not sending empty message.")
+	}
+
 	url := bot.ApiUrlFor(sendMessage)
 	msg := SendMessageParams{bot.chatId, text}
 
