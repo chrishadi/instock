@@ -45,5 +45,16 @@ CREATE TABLE public.stocks (
 CREATE INDEX ON public.stocks (code);
 
 --
+-- Name: stock_last_updates; Type: MATERIALIZED VIEW; Schema: public
+--
+
+CREATE MATERIALIZED VIEW public.stock_last_updates AS
+ SELECT stocks.code,
+    max(stocks.last_update) AS last_update
+   FROM public.stocks
+  GROUP BY stocks.code
+  WITH NO DATA;
+
+--
 -- PostgreSQL database dump complete
 --

@@ -1,4 +1,4 @@
-package main
+package ingest
 
 import (
 	"reflect"
@@ -9,15 +9,15 @@ var a = Stock{Code: "A", LastUpdate: "2020-02-03T00:00:00"}
 var b = Stock{Code: "B", LastUpdate: "2020-02-02T00:00:00"}
 var c = Stock{Code: "C", LastUpdate: "2020-02-03T00:00:00"}
 
-func TestFilterGivenEmptyDB(t *testing.T) {
-	savedStocks := []Stock{}
+func TestFilterGivenEmptyDBShouldReturnAllStocksAsNewAndActive(t *testing.T) {
+	lastUpdates := []StockLastUpdate{}
 	newStocks := []Stock{a, b, c}
 
-	expected := FilterResult{
+	expected := &FilterResult{
 		Active: []Stock{a, b, c},
 		New:    []Stock{a, b, c},
 	}
-	actual, err := filter(newStocks, savedStocks)
+	actual, err := filter(newStocks, lastUpdates)
 
 	if err != nil {
 		t.Error(err)
@@ -27,20 +27,20 @@ func TestFilterGivenEmptyDB(t *testing.T) {
 	}
 }
 
-func TestFilterGivenNewActiveAndStaleStocks(t *testing.T) {
-	_a := Stock{Code: "A", LastUpdate: "2020-02-02 00:00:00"}
-	_b := Stock{Code: "B", LastUpdate: "2020-02-02 00:00:00"}
-	_d := Stock{Code: "D", LastUpdate: "2020-02-02 00:00:00"}
+func TestFilterGivenNewActiveAndStaleStocksShouldSplitThem(t *testing.T) {
+	alu := StockLastUpdate{Code: "A", LastUpdate: "2020-02-02 00:00:00"}
+	blu := StockLastUpdate{Code: "B", LastUpdate: "2020-02-02 00:00:00"}
+	dlu := StockLastUpdate{Code: "D", LastUpdate: "2020-02-02 00:00:00"}
 
-	savedStocks := []Stock{_a, _b, _d}
+	lastUpdates := []StockLastUpdate{alu, blu, dlu}
 	newStocks := []Stock{a, b, c}
 
-	expected := FilterResult{
+	expected := &FilterResult{
 		Active: []Stock{a, c},
 		Stale:  []Stock{b},
 		New:    []Stock{c},
 	}
-	actual, err := filter(newStocks, savedStocks)
+	actual, err := filter(newStocks, lastUpdates)
 
 	if err != nil {
 		t.Error(err)

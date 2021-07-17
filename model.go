@@ -17,3 +17,8 @@ type Stock struct {
 	Value             float64 `json:"Value"`
 	LastUpdate        string  `json:"LastUpdate"`
 }
+
+type StockLastUpdate struct {
+	Code       string `json:"Code"`
+	LastUpdate string `json:"LastUpdate"`
+}

@@ -1,9 +1,7 @@
 package tbot
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"testing"
@@ -12,122 +10,68 @@ import (
 )
 
 const (
-	dummyChatId  = 123
-	dummyMessage = "dummyMessage"
-	dummyToken   = "api:token"
+	chatId  = 123
+	message = "message"
+	token   = "api:token"
 )
 
-type fakeBody struct {
-	content []byte
-}
-
-func (m fakeBody) Read(p []byte) (int, error) {
-	copy(p, m.content)
-	return len(m.content), io.EOF
-}
-
-func (m fakeBody) Close() error {
-	return nil
-}
-
-func TestNewGivenNonEmptyTokenThenReturnBot(t *testing.T) {
-	opts := BotOptions{http.Post, json.Marshal, common.ReadResponse}
-	expected := &Bot{dummyToken, dummyChatId, &opts}
-
-	bot := New(dummyToken, dummyChatId, &opts)
-
-	if bot.token != expected.token ||
-		bot.chatId != expected.chatId ||
-		bot.opts.HttpPost == nil ||
-		bot.opts.JsonMarshal == nil ||
-		bot.opts.ReadResponse == nil {
-		t.Errorf("Expect %v, got %v", expected, bot)
-	}
-}
-
-func TestNewGivenEmptyTokenThenReturnNil(t *testing.T) {
-	bot := New("", dummyChatId, nil)
+func TestNewGivenEmptyTokenShouldReturnNil(t *testing.T) {
+	bot := New("", chatId, nil)
 
 	if bot != nil {
 		t.Error("Expect bot to be nil, got", bot)
 	}
 }
 
-func TestApiUrlFor(t *testing.T) {
-	command := "getAnything"
-	expected := fmt.Sprintf(apiUrlFmt, dummyToken, command)
+func TestNewGivenNonEmptyTokenShouldReturnBot(t *testing.T) {
+	opts := BotOptions{http.Post}
+	expected := &Bot{token, chatId, &opts}
 
-	bot := New(dummyToken, dummyChatId, &BotOptions{})
-	actual := bot.ApiUrlFor(command)
+	bot := New(token, chatId, &opts)
 
-	if actual != expected {
-		t.Errorf("Expect %s, got %s", expected, actual)
+	if bot.token != expected.token ||
+		bot.chatId != expected.chatId ||
+		bot.opts.HttpPost == nil {
+		t.Errorf("Expect %v, got %v", expected, bot)
 	}
 }
 
-func TestSendMessageGivenHttpPostReturnOk(t *testing.T) {
-	resp := http.Response{StatusCode: 200, Body: fakeBody{content: []byte(`{"ok":true,"result":[]}`)}}
-	httpPost := func(url, contentType string, body io.Reader) (*http.Response, error) {
-		return &resp, nil
-	}
-	opts := BotOptions{httpPost, json.Marshal, common.ReadResponse}
-
-	bot := New(dummyToken, dummyChatId, &opts)
-	err := bot.SendMessage(dummyMessage)
-
-	if err != nil {
-		t.Error("Expect error to be nil, got", err)
-	}
-}
-
-func TestSendMessageGivenStatusCodeIsNot200(t *testing.T) {
-	resp := http.Response{StatusCode: 400, Body: fakeBody{content: []byte(`{"ok":false,"result":[]}`)}}
-	httpPost := func(url, contentType string, body io.Reader) (*http.Response, error) {
-		return &resp, nil
-	}
-	opts := BotOptions{httpPost, json.Marshal, common.ReadResponse}
-
-	bot := New(dummyToken, dummyChatId, &opts)
-	err := bot.SendMessage(dummyMessage)
-
-	if err == nil {
-		t.Error("Expect error not to be nil")
-	}
-}
-
-func TestSendMessageGivenHttpPostReturnError(t *testing.T) {
-	httpPost := func(url, contentType string, body io.Reader) (*http.Response, error) {
-		return nil, errors.New(dummyMessage)
-	}
-	opts := BotOptions{httpPost, json.Marshal, nil}
-
-	bot := New(dummyToken, dummyChatId, &opts)
-	err := bot.SendMessage(dummyMessage)
-
-	if err == nil {
-		t.Error("Expect error not to be nil")
-	}
-}
-
-func TestSendMessageGivenJsonMarshalReturnError(t *testing.T) {
-	jsonMarshal := func(interface{}) ([]byte, error) {
-		return nil, errors.New("")
-	}
-	opts := BotOptions{nil, jsonMarshal, nil}
-
-	bot := New(dummyToken, dummyChatId, &opts)
-	err := bot.SendMessage(dummyMessage)
-
-	if err == nil {
-		t.Error("Expect error not to be nil")
-	}
-}
-
-func TestSendMessageGivenEmptyMessageReturnError(t *testing.T) {
-	bot := New(dummyToken, dummyChatId, &BotOptions{})
+func TestSendMessageGivenEmptyMessageShouldReturnError(t *testing.T) {
+	bot := New(token, chatId, &BotOptions{})
 	err := bot.SendMessage("")
 
 	if err == nil {
 		t.Error("Expect error not to be nil")
+	}
+}
+
+func TestSendMessageWhenHttpPostFailShouldReturnError(t *testing.T) {
+	httpPost := func(url, contentType string, body io.Reader) (*http.Response, error) {
+		return nil, errors.New("http-post-error")
+	}
+	opts := BotOptions{httpPost}
+
+	bot := New(token, chatId, &opts)
+	err := bot.SendMessage(message)
+
+	if err == nil {
+		t.Error("Expect error not to be nil")
+	}
+}
+
+func TestSendMessageWhenHttpPostOkShouldReturnNil(t *testing.T) {
+	httpPost := func(url, contentType string, body io.Reader) (*http.Response, error) {
+		resp := http.Response{
+			StatusCode: 200,
+			Body:       common.MockRespBody{Content: []byte(`{"ok":true,"result":[]}`)}}
+		return &resp, nil
+	}
+	opts := BotOptions{httpPost}
+
+	bot := New(token, chatId, &opts)
+	err := bot.SendMessage(message)
+
+	if err != nil {
+		t.Error("Expect error to be nil, got", err)
 	}
 }

@@ -1,6 +1,7 @@
-package main
+package ingest
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -9,79 +10,116 @@ import (
 
 	"github.com/chrishadi/instock/common"
 	"github.com/chrishadi/instock/tbot"
-	"github.com/go-pg/pg/v10"
 )
 
-func main() {
+type PubSubMessage struct {
+	Data []byte `json:"data"`
+}
+
+type IngestionResult struct {
+	received int
+	*FilterResult
+}
+
+func Ingest(ctx context.Context, m PubSubMessage) error {
 	bot := tbot.New(botToken, chatId, &tbot.BotOptions{
-		HttpPost:     http.Post,
-		JsonMarshal:  json.Marshal,
-		ReadResponse: common.ReadResponse,
+		HttpPost: http.Post,
 	})
+
 	sb := &strings.Builder{}
-	defer sendMessage(bot, sb)
+	defer func() {
+		sendMessage(bot, sb.String())
+	}()
 
-	newStocks, err := getStocks(stockApiUrl, http.Get, common.ReadResponse, json.Unmarshal)
-	if err != nil {
-		panicws(sb, err)
-	}
-
-	db := pg.Connect(&pgOpts)
+	db := ConnectDb(&pgOpts)
 	defer db.Close()
 
-	savedStocks, err := queryAllStockCodeAndLastUpdate(db)
+	buf, err := getStockJsonFromApi(stockApiUrl, http.Get)
 	if err != nil {
 		panicws(sb, err)
 	}
 
-	facets, err := filter(newStocks, savedStocks)
+	res, err := ingestJson(buf, db)
 	if err != nil {
-		panicws(sb, err)
+		if res == nil {
+			panicws(sb, err)
+		} else {
+			logws(sb, err)
+		}
 	}
 
-	inserted := 0
-	ormRes, err := db.Model(&facets.Active).Insert()
 	if err != nil {
-		logws(sb, err)
-	} else {
-		inserted = ormRes.RowsReturned()
 	}
 
-	logwsf(sb, "Received: %d, Active: %d, Inserted: %d\n", len(newStocks), len(facets.Active), inserted)
-	logwsf(sb, "New: %d\n", len(facets.New))
-	logws(sb, extractCode(facets.New))
-	logwsf(sb, "Stale: %d\n", len(facets.Stale))
-	logws(sb, extractCode(facets.Stale))
+	lnew := len(res.New)
+	msg := fmt.Sprintf("Received: %d, Active: %d, Stale: %d, New: %d\n", res.received, len(res.Active), len(res.Stale), lnew)
+	logws(sb, msg)
+	if lnew > 0 {
+		codes := extractCodes(res.New)
+		logws(sb, strings.Join(codes, " "))
+	}
+
+	return err
 }
 
-func getStocks(url string, httpGet common.HttpGetFn, readResponse common.ReadResponseFn, jsonUnmarshal common.JsonUnmarshalFn) (stocks []Stock, err error) {
+func getStockJsonFromApi(url string, httpGet common.HttpGetFunc) ([]byte, error) {
 	resp, err := httpGet(url)
 	if err != nil {
-		return stocks, err
+		return nil, err
 	}
-	defer resp.Body.Close()
 
-	bytes, err := readResponse(resp)
+	return common.ReadResponse(resp)
+}
+
+func ingestJson(buf []byte, db db) (*IngestionResult, error) {
+	var newStocks []Stock
+
+	err := json.Unmarshal(buf, &newStocks)
 	if err != nil {
-		return stocks, err
+		return nil, err
 	}
 
-	err = jsonUnmarshal(bytes, &stocks)
+	stockLastUpdates, err := getStockLastUpdates(db)
+	if err != nil {
+		return nil, err
+	}
 
-	return stocks, err
+	facets, err := filter(newStocks, stockLastUpdates)
+	if err != nil {
+		return nil, err
+	}
+
+	res := IngestionResult{received: len(newStocks), FilterResult: facets}
+	if len(res.Active) > 0 {
+		err = insertStocks(res.Active, db)
+		if err == nil {
+			_, err = db.Exec((*StockLastUpdate)(nil), "REFRESH MATERIALIZED VIEW ?TableName")
+		}
+	}
+
+	return &res, err
 }
 
-func queryAllStockCodeAndLastUpdate(db *pg.DB) (stocks []Stock, err error) {
-	err = db.Model(&stocks).
-		Column("code").
-		ColumnExpr("max(last_update) AS last_update").
-		Group("code").
-		Select()
-
-	return stocks, err
+func getStockLastUpdates(db db) (stockLastUpdates []StockLastUpdate, err error) {
+	err = db.Select(&stockLastUpdates)
+	return stockLastUpdates, err
 }
 
-func extractCode(stocks []Stock) []string {
+func insertStocks(stocks []Stock, db db) error {
+	ormRes, err := db.Insert(&stocks)
+	if err != nil {
+		return err
+	}
+
+	inserted := ormRes.RowsReturned()
+	if inserted < len(stocks) {
+		return fmt.Errorf("Inserted %d is less than active stocks", inserted)
+	}
+
+	return nil
+}
+
+func extractCodes(stocks []Stock) []string {
 	res := make([]string, len(stocks))
 	for i, stock := range stocks {
 		res[i] = stock.Code
@@ -95,23 +133,22 @@ func logws(b *strings.Builder, v interface{}) {
 	b.WriteString(s)
 }
 
-func logwsf(b *strings.Builder, format string, v ...interface{}) {
-	s := fmt.Sprintf(format, v...)
-	log.Print(s)
-	b.WriteString(s)
-}
-
 func panicws(b *strings.Builder, v interface{}) {
 	s := fmt.Sprint(v)
 	b.WriteString(s)
 	log.Panic(s)
 }
 
-func sendMessage(bot *tbot.Bot, b *strings.Builder) {
-	if bot != nil && b.Len() > 0 {
-		err := bot.SendMessage(b.String())
-		if err != nil {
-			log.Print(err)
-		}
+func sendMessage(bot *tbot.Bot, msg string) {
+	if bot == nil || len(msg) == 0 {
+		return
+	}
+
+	log.Print("Sending bot message...")
+	err := bot.SendMessage(msg)
+	if err != nil {
+		log.Print(err)
+	} else {
+		log.Print("Done")
 	}
 }

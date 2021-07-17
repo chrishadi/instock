@@ -2,6 +2,7 @@ package tbot
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -15,9 +16,7 @@ const (
 )
 
 type BotOptions struct {
-	HttpPost     common.HttpPostFn
-	JsonMarshal  common.JsonMarshalFn
-	ReadResponse common.ReadResponseFn
+	HttpPost common.HttpPostFunc
 }
 
 type Bot struct {
@@ -48,18 +47,14 @@ func (bot Bot) SendMessage(text string) error {
 	}
 
 	url := bot.ApiUrlFor(sendMessage)
-	msg := SendMessageParams{bot.chatId, text}
+	params := SendMessageParams{bot.chatId, text}
 
-	jsonb, err := bot.opts.JsonMarshal(msg)
-	if err != nil {
-		return err
-	}
-
-	body := bytes.NewBuffer(jsonb)
+	json, _ := json.Marshal(params)
+	body := bytes.NewBuffer(json)
 	resp, err := bot.opts.HttpPost(url, contentType, body)
 	if err == nil {
 		defer resp.Body.Close()
-		_, err = bot.opts.ReadResponse(resp)
+		_, err = common.ReadResponse(resp)
 	}
 
 	return err
