@@ -1,9 +1,23 @@
 package common
 
 import (
+	"io"
 	"net/http"
 	"testing"
 )
+
+type MockRespBody struct {
+	Content []byte
+}
+
+func (m MockRespBody) Read(p []byte) (int, error) {
+	copy(p, m.Content)
+	return len(m.Content), io.EOF
+}
+
+func (m MockRespBody) Close() error {
+	return nil
+}
 
 func TestReadResponseGivenStatusCodeIsNot200ShouldReturnError(t *testing.T) {
 	oops := []byte("oops")

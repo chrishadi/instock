@@ -1,22 +1,20 @@
 package tbot
 
 import (
-	"errors"
-	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
-
-	"github.com/chrishadi/instock/common"
 )
 
 const (
+	host    = "host"
 	chatId  = 123
 	message = "message"
 	token   = "api:token"
 )
 
 func TestNewGivenEmptyTokenShouldReturnNil(t *testing.T) {
-	bot := New("", chatId, nil)
+	bot := New(host, "", chatId)
 
 	if bot != nil {
 		t.Error("Expect bot to be nil, got", bot)
@@ -24,20 +22,26 @@ func TestNewGivenEmptyTokenShouldReturnNil(t *testing.T) {
 }
 
 func TestNewGivenNonEmptyTokenShouldReturnBot(t *testing.T) {
-	opts := BotOptions{http.Post}
-	expected := &Bot{token, chatId, &opts}
+	bot := New(host, token, chatId)
 
-	bot := New(token, chatId, &opts)
-
-	if bot.token != expected.token ||
-		bot.chatId != expected.chatId ||
-		bot.opts.HttpPost == nil {
+	if bot.host != host ||
+		bot.token != token ||
+		bot.chatId != chatId {
+		expected := &Bot{host, token, chatId}
 		t.Errorf("Expect %v, got %v", expected, bot)
 	}
 }
 
+func TestNewGivenHostWithTrailingSlashShouldRemoveIt(t *testing.T) {
+	bot := New("host/", token, chatId)
+
+	if bot.host != "host" {
+		t.Errorf("Expect host, got %s", bot.host)
+	}
+}
+
 func TestSendMessageGivenEmptyMessageShouldReturnError(t *testing.T) {
-	bot := New(token, chatId, &BotOptions{})
+	bot := New(host, token, chatId)
 	err := bot.SendMessage("")
 
 	if err == nil {
@@ -46,12 +50,10 @@ func TestSendMessageGivenEmptyMessageShouldReturnError(t *testing.T) {
 }
 
 func TestSendMessageWhenHttpPostFailShouldReturnError(t *testing.T) {
-	httpPost := func(url, contentType string, body io.Reader) (*http.Response, error) {
-		return nil, errors.New("http-post-error")
-	}
-	opts := BotOptions{httpPost}
+	ts := httptest.NewServer(http.NotFoundHandler())
+	defer ts.Close()
 
-	bot := New(token, chatId, &opts)
+	bot := New(ts.URL, token, chatId)
 	err := bot.SendMessage(message)
 
 	if err == nil {
@@ -60,15 +62,13 @@ func TestSendMessageWhenHttpPostFailShouldReturnError(t *testing.T) {
 }
 
 func TestSendMessageWhenHttpPostOkShouldReturnNil(t *testing.T) {
-	httpPost := func(url, contentType string, body io.Reader) (*http.Response, error) {
-		resp := http.Response{
-			StatusCode: 200,
-			Body:       common.MockRespBody{Content: []byte(`{"ok":true,"result":[]}`)}}
-		return &resp, nil
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"ok":true,"result":[]}`))
 	}
-	opts := BotOptions{httpPost}
+	ts := httptest.NewServer(http.HandlerFunc(handler))
+	defer ts.Close()
 
-	bot := New(token, chatId, &opts)
+	bot := New(ts.URL, token, chatId)
 	err := bot.SendMessage(message)
 
 	if err != nil {

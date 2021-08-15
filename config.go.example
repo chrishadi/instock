@@ -11,5 +11,6 @@ var pgOpts pg.Options = pg.Options{
 	User:     "dbuser",
 }
 
+var botHost = "https://api.telegram.org"
 var botToken = ""
 var chatId = 12345

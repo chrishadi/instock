@@ -22,10 +22,7 @@ type IngestionResult struct {
 }
 
 func Ingest(ctx context.Context, m PubSubMessage) error {
-	bot := tbot.New(botToken, chatId, &tbot.BotOptions{
-		HttpPost: http.Post,
-	})
-
+	bot := tbot.New(botHost, botToken, chatId)
 	sb := &strings.Builder{}
 	defer func() {
 		sendMessage(bot, sb.String())
@@ -34,7 +31,7 @@ func Ingest(ctx context.Context, m PubSubMessage) error {
 	db := ConnectDb(&pgOpts)
 	defer db.Close()
 
-	buf, err := getStockJsonFromApi(stockApiUrl, http.Get)
+	buf, err := getStockJsonFromApi(stockApiUrl)
 	if err != nil {
 		panicws(sb, err)
 	}
@@ -48,9 +45,6 @@ func Ingest(ctx context.Context, m PubSubMessage) error {
 		}
 	}
 
-	if err != nil {
-	}
-
 	lnew := len(res.New)
 	msg := fmt.Sprintf("Received: %d, Active: %d, Stale: %d, New: %d\n", res.received, len(res.Active), len(res.Stale), lnew)
 	logws(sb, msg)
@@ -62,8 +56,8 @@ func Ingest(ctx context.Context, m PubSubMessage) error {
 	return err
 }
 
-func getStockJsonFromApi(url string, httpGet common.HttpGetFunc) ([]byte, error) {
-	resp, err := httpGet(url)
+func getStockJsonFromApi(url string) ([]byte, error) {
+	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}

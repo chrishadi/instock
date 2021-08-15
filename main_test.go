@@ -2,51 +2,45 @@ package ingest
 
 import (
 	"errors"
-	"io"
 	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/chrishadi/instock/common"
 	"github.com/chrishadi/instock/tbot"
 	"github.com/go-pg/pg/v10/orm"
 )
 
 const (
-	url       = "url"
-	token     = "bot:token"
-	botChatId = 9
-	oops      = "oops"
+	url        = "url"
+	oops       = "oops"
+	tbotHost   = "bot-host"
+	tbotToken  = "bot:token"
+	tbotChatId = 9
 )
 
 var stockJson = []byte(`[{"Code":"A","LastUpdate":"2021-07-10T00:00:00"}]`)
 
-func TestGetStockJsonFromApiWhenHttpGetFailShouldReturnErrorAndNilJson(t *testing.T) {
-	httpGetStub := func(url string) (*http.Response, error) {
-		return nil, errors.New("http-get-error")
-	}
+func TestGetStockJsonFromApiWhenFailShouldHaveError(t *testing.T) {
+	ts := httptest.NewUnstartedServer(nil)
+	defer ts.Close()
 
-	json, err := getStockJsonFromApi(url, httpGetStub)
+	_, err := getStockJsonFromApi(ts.URL)
 
 	if err == nil {
 		t.Error("Expect error not to be nil")
 	}
-	if json != nil {
-		t.Error("Expect json to be nil, got", json)
-	}
 }
 
 func TestGetStockJsonFromApiWhenSuccessShouldReturnJsonAndNilError(t *testing.T) {
-	httpGetStub := func(url string) (*http.Response, error) {
-		resp := http.Response{
-			StatusCode: 200,
-			Body:       common.MockRespBody{Content: []byte(stockJson)},
-		}
-		return &resp, nil
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.Write(stockJson)
 	}
+	ts := httptest.NewServer(http.HandlerFunc(handler))
+	defer ts.Close()
 
-	json, err := getStockJsonFromApi(url, httpGetStub)
+	json, err := getStockJsonFromApi(ts.URL)
 
 	if err != nil {
 		t.Error("Expect error to be nil, got", err)
@@ -185,11 +179,14 @@ func TestPanicWsGivenAnErrorShouldWriteItsMessageToBuffer(t *testing.T) {
 
 func TestSendMessageGivenEmptyMessageShouldNotSendMessage(t *testing.T) {
 	sent := false
-	httpPost := func(url, contentType string, body io.Reader) (*http.Response, error) {
+
+	handler := func(w http.ResponseWriter, r *http.Request) {
 		sent = true
-		return nil, nil
 	}
-	bot := tbot.New(token, botChatId, &tbot.BotOptions{HttpPost: httpPost})
+	ts := httptest.NewServer(http.HandlerFunc(handler))
+	defer ts.Close()
+
+	bot := tbot.New(ts.URL, tbotToken, tbotChatId)
 
 	sendMessage(bot, "")
 
@@ -198,11 +195,22 @@ func TestSendMessageGivenEmptyMessageShouldNotSendMessage(t *testing.T) {
 	}
 }
 
-func TestSendMessageWhenHttpPostFailShouldLogError(t *testing.T) {
-	httpPost := func(url, contentType string, body io.Reader) (*http.Response, error) {
-		return nil, errors.New("http-post-error")
+func TestSendMessageWhenFail(t *testing.T) {
+	ts := httptest.NewServer(http.NotFoundHandler())
+	defer ts.Close()
+
+	bot := tbot.New(ts.URL, tbotToken, tbotChatId)
+
+	sendMessage(bot, "bot-message")
+}
+
+func TestSendMessageWhenSuccess(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
 	}
-	bot := tbot.New(token, botChatId, &tbot.BotOptions{HttpPost: httpPost})
+	ts := httptest.NewServer(http.HandlerFunc(handler))
+	defer ts.Close()
+
+	bot := tbot.New(ts.URL, tbotToken, tbotChatId)
 
 	sendMessage(bot, "bot-message")
 }
