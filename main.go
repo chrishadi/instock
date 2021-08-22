@@ -59,6 +59,13 @@ func Ingest(ctx context.Context, m PubSubMessage) error {
 		logws(sb, strings.Join(codes, " "))
 	}
 
+	if len(res.TopGainers) > 0 {
+		logws(sb, "Gainers: "+strings.Join(res.TopGainers, " "))
+	}
+	if len(res.TopLosers) > 0 {
+		logws(sb, "Losers: "+strings.Join(res.TopLosers, " "))
+	}
+
 	return err
 }
 

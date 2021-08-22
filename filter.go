@@ -1,11 +1,16 @@
 package ingest
 
-import "time"
+import (
+	"container/list"
+	"time"
+)
 
 type FilterResult struct {
-	Active []Stock
-	New    []Stock
-	Stale  []Stock
+	Active     []Stock
+	New        []Stock
+	Stale      []Stock
+	TopGainers []string
+	TopLosers  []string
 }
 
 func filter(newStocks []Stock, stockLastUpdates []StockLastUpdate) (*FilterResult, error) {
@@ -25,6 +30,9 @@ func filter(newStocks []Stock, stockLastUpdates []StockLastUpdate) (*FilterResul
 	for _, stock := range stockLastUpdates {
 		lastUpdateMap[stock.Code] = stock.LastUpdate
 	}
+
+	topGainers := list.New()
+	topLosers := list.New()
 
 	for _, stock := range newStocks {
 		lastUpdate, exist := lastUpdateMap[stock.Code]
@@ -48,7 +56,51 @@ func filter(newStocks []Stock, stockLastUpdates []StockLastUpdate) (*FilterResul
 		}
 
 		res.Active = append(res.Active, stock)
+
+		gain := stock.OneDay
+		if gain == 0.0 {
+			continue
+		}
+		if gain > 0.0 {
+			if topGainers.Len() < numOfGL || gain > topGainers.Back().Value.(StockGain).Gain {
+				updateTopRank(topGainers, stock, func(a, b float64) bool { return a > b })
+			}
+		} else {
+			if topLosers.Len() < numOfGL || gain < topLosers.Back().Value.(StockGain).Gain {
+				updateTopRank(topLosers, stock, func(a, b float64) bool { return a < b })
+			}
+		}
 	}
 
+	res.TopGainers = extractTopRankCodes(topGainers)
+	res.TopLosers = extractTopRankCodes(topLosers)
+
 	return &res, nil
+}
+
+func updateTopRank(tr *list.List, stock Stock, greater func(a, b float64) bool) {
+	gain := stock.OneDay
+	obj := StockGain{stock.Code, gain}
+
+	if tr.Len() == 0 || greater(gain, tr.Front().Value.(StockGain).Gain) {
+		tr.PushFront(obj)
+	} else {
+		e := tr.Back()
+		for greater(gain, e.Value.(StockGain).Gain) {
+			e = e.Prev()
+		}
+		tr.InsertAfter(obj, e)
+	}
+
+	if tr.Len() > numOfGL {
+		tr.Remove(tr.Back())
+	}
+}
+
+func extractTopRankCodes(ls *list.List) []string {
+	codes := make([]string, 0, ls.Len())
+	for e := ls.Front(); e != nil; e = e.Next() {
+		codes = append(codes, e.Value.(StockGain).Code)
+	}
+	return codes
 }
