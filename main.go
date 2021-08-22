@@ -25,7 +25,13 @@ func Ingest(ctx context.Context, m PubSubMessage) error {
 	bot := tbot.New(botHost, botToken, chatId)
 	sb := &strings.Builder{}
 	defer func() {
-		sendMessage(bot, sb.String())
+		log.Print("Sending bot message...")
+		err := sendMessage(bot, sb.String())
+		if err != nil {
+			log.Print(err)
+		} else {
+			log.Print("Done")
+		}
 	}()
 
 	db := ConnectDb(&pgOpts)
@@ -46,7 +52,7 @@ func Ingest(ctx context.Context, m PubSubMessage) error {
 	}
 
 	lnew := len(res.New)
-	msg := fmt.Sprintf("Received: %d, Active: %d, Stale: %d, New: %d\n", res.received, len(res.Active), len(res.Stale), lnew)
+	msg := fmt.Sprintf("Received: %d, Active: %d, Stale: %d, New: %d", res.received, len(res.Active), len(res.Stale), lnew)
 	logws(sb, msg)
 	if lnew > 0 {
 		codes := extractCodes(res.New)
@@ -61,6 +67,7 @@ func getStockJsonFromApi(url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	return common.ReadResponse(resp)
 }
@@ -133,16 +140,10 @@ func panicws(b *strings.Builder, v interface{}) {
 	log.Panic(s)
 }
 
-func sendMessage(bot *tbot.Bot, msg string) {
+func sendMessage(bot *tbot.Bot, msg string) error {
 	if bot == nil || len(msg) == 0 {
-		return
+		return nil
 	}
 
-	log.Print("Sending bot message...")
-	err := bot.SendMessage(msg)
-	if err != nil {
-		log.Print(err)
-	} else {
-		log.Print("Done")
-	}
+	return bot.SendMessage(msg)
 }

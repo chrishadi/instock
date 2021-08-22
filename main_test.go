@@ -195,16 +195,20 @@ func TestSendMessageGivenEmptyMessageShouldNotSendMessage(t *testing.T) {
 	}
 }
 
-func TestSendMessageWhenFail(t *testing.T) {
+func TestSendMessageWhenFailShouldNotReturnNilError(t *testing.T) {
 	ts := httptest.NewServer(http.NotFoundHandler())
 	defer ts.Close()
 
 	bot := tbot.New(ts.URL, tbotToken, tbotChatId)
 
-	sendMessage(bot, "bot-message")
+	err := sendMessage(bot, "bot-message")
+
+	if err == nil {
+		t.Error("Expect error not to be nil, got nil")
+	}
 }
 
-func TestSendMessageWhenSuccess(t *testing.T) {
+func TestSendMessageWhenSuccessShouldReturnNilError(t *testing.T) {
 	handler := func(w http.ResponseWriter, r *http.Request) {
 	}
 	ts := httptest.NewServer(http.HandlerFunc(handler))
@@ -212,5 +216,9 @@ func TestSendMessageWhenSuccess(t *testing.T) {
 
 	bot := tbot.New(ts.URL, tbotToken, tbotChatId)
 
-	sendMessage(bot, "bot-message")
+	err := sendMessage(bot, "bot-message")
+
+	if err != nil {
+		t.Error("Expect error to be nil, got", err)
+	}
 }
