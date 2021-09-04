@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/chrishadi/instock/tbot"
-	"github.com/go-pg/pg/v10/orm"
 )
 
 const (
@@ -50,77 +49,63 @@ func TestGetStockJsonFromApiWhenSuccessShouldReturnJsonAndNilError(t *testing.T)
 	}
 }
 
-type mockDB struct {
-	selectError  error
-	insertResult orm.Result
-	insertError  error
-	execResult   orm.Result
-	execError    error
+type mockStockRepository struct {
+	inserted    int
+	insertError error
 }
 
-func (db *mockDB) Select(model interface{}) error {
-	return db.selectError
+func (mock mockStockRepository) Insert(stocks []Stock) (int, error) {
+	return mock.inserted, mock.insertError
 }
 
-func (db *mockDB) Insert(model interface{}) (orm.Result, error) {
-	return db.insertResult, db.insertError
+type mockStockLastUpdateRepository struct {
+	getResult    []StockLastUpdate
+	getError     error
+	refreshError error
 }
 
-func (db *mockDB) Exec(model interface{}, query string) (orm.Result, error) {
-	return db.execResult, db.execError
+func (mock mockStockLastUpdateRepository) Get() ([]StockLastUpdate, error) {
+	return mock.getResult, mock.getError
 }
 
-func (db *mockDB) Close() {
-}
-
-type mockOrmResult struct{}
-
-func (r mockOrmResult) Model() orm.Model {
-	return nil
-}
-
-func (r mockOrmResult) RowsAffected() int {
-	return 0
-}
-
-func (r mockOrmResult) RowsReturned() int {
-	return 1
+func (mock mockStockLastUpdateRepository) Refresh() error {
+	return mock.refreshError
 }
 
 func TestIngestJsonGivenBadJsonShouldReturnError(t *testing.T) {
 	badJson := []byte("bad-json")
 
-	_, err := ingestJson(badJson, nil)
+	_, err := ingestJson(badJson, mockStockRepository{}, mockStockLastUpdateRepository{})
 
 	if err == nil {
 		t.Error("Expect error to be nil")
 	}
 }
 
-func TestIngestJsonWhenDbSelectFailShouldReturnError(t *testing.T) {
-	db := mockDB{selectError: errors.New("db-select-error")}
+func TestIngestJsonWhenGetStockLastUpdatesFailShouldReturnError(t *testing.T) {
+	stockLastUpdateRepo := mockStockLastUpdateRepository{getError: errors.New("get-error")}
 
-	_, err := ingestJson(stockJson, &db)
-
-	if err == nil {
-		t.Error("Expect error not to be nil")
-	}
-}
-
-func TestIngestJsonWhenDbInsertFailShouldReturnError(t *testing.T) {
-	db := mockDB{insertError: errors.New("db-insert-error")}
-
-	_, err := ingestJson(stockJson, &db)
+	_, err := ingestJson(stockJson, mockStockRepository{}, stockLastUpdateRepo)
 
 	if err == nil {
 		t.Error("Expect error not to be nil")
 	}
 }
 
-func TestIngestJsonWhenDbExecFailShouldReturnError(t *testing.T) {
-	db := mockDB{insertError: errors.New("db-exec-error")}
+func TestIngestJsonWhenInsertStocksFailShouldReturnError(t *testing.T) {
+	stockRepo := mockStockRepository{insertError: errors.New("insert-error")}
 
-	_, err := ingestJson(stockJson, &db)
+	_, err := ingestJson(stockJson, stockRepo, mockStockLastUpdateRepository{})
+
+	if err == nil {
+		t.Error("Expect error not to be nil")
+	}
+}
+
+func TestIngestJsonWhenRefreshStockLastUpdatesFailShouldReturnError(t *testing.T) {
+	stockLastUpdateRepo := mockStockLastUpdateRepository{refreshError: errors.New("refresh-mv-error")}
+
+	_, err := ingestJson(stockJson, mockStockRepository{}, stockLastUpdateRepo)
 
 	if err == nil {
 		t.Error("Expect error not to be nil")
@@ -128,8 +113,8 @@ func TestIngestJsonWhenDbExecFailShouldReturnError(t *testing.T) {
 }
 
 func TestIngestJsonWhenSuccessShouldReturnNilError(t *testing.T) {
-	insertResult := mockOrmResult{}
-	_, err := ingestJson(stockJson, &mockDB{insertResult: insertResult})
+	stockRepo := mockStockRepository{inserted: 1}
+	_, err := ingestJson(stockJson, stockRepo, mockStockLastUpdateRepository{})
 
 	if err != nil {
 		t.Error("Expect error to be nil, got", err)

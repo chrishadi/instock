@@ -10,6 +10,7 @@ import (
 
 	"github.com/chrishadi/instock/common"
 	"github.com/chrishadi/instock/tbot"
+	"github.com/go-pg/pg/v10"
 )
 
 type PubSubMessage struct {
@@ -34,7 +35,7 @@ func Ingest(ctx context.Context, m PubSubMessage) error {
 		}
 	}()
 
-	db := ConnectDb(&pgOpts)
+	db := pg.Connect(&pgOpts)
 	defer db.Close()
 
 	buf, err := getStockJsonFromApi(stockApiUrl)
@@ -42,7 +43,9 @@ func Ingest(ctx context.Context, m PubSubMessage) error {
 		panicws(sb, err)
 	}
 
-	res, err := ingestJson(buf, db)
+	stockRepo := PgStockRepository{db: db}
+	stockLastUpdateRepo := PgStockLastUpdateRepository{db: db}
+	res, err := ingestJson(buf, stockRepo, stockLastUpdateRepo)
 	if err != nil {
 		if res == nil {
 			panicws(sb, err)
@@ -79,7 +82,7 @@ func getStockJsonFromApi(url string) ([]byte, error) {
 	return common.ReadResponse(resp)
 }
 
-func ingestJson(buf []byte, db db) (*IngestionResult, error) {
+func ingestJson(buf []byte, stockRepo StockRepository, stockLastUpdateRepo StockLastUpdateRepository) (*IngestionResult, error) {
 	var newStocks []Stock
 
 	err := json.Unmarshal(buf, &newStocks)
@@ -87,7 +90,7 @@ func ingestJson(buf []byte, db db) (*IngestionResult, error) {
 		return nil, err
 	}
 
-	stockLastUpdates, err := getStockLastUpdates(db)
+	stockLastUpdates, err := stockLastUpdateRepo.Get()
 	if err != nil {
 		return nil, err
 	}
@@ -99,27 +102,21 @@ func ingestJson(buf []byte, db db) (*IngestionResult, error) {
 
 	res := IngestionResult{received: len(newStocks), FilterResult: facets}
 	if len(res.Active) > 0 {
-		err = insertStocks(res.Active, db)
+		err = insertStocks(res.Active, stockRepo)
 		if err == nil {
-			_, err = db.Exec((*StockLastUpdate)(nil), "REFRESH MATERIALIZED VIEW ?TableName")
+			err = stockLastUpdateRepo.Refresh()
 		}
 	}
 
 	return &res, err
 }
 
-func getStockLastUpdates(db db) (stockLastUpdates []StockLastUpdate, err error) {
-	err = db.Select(&stockLastUpdates)
-	return stockLastUpdates, err
-}
-
-func insertStocks(stocks []Stock, db db) error {
-	ormRes, err := db.Insert(&stocks)
+func insertStocks(stocks []Stock, repo StockRepository) error {
+	inserted, err := repo.Insert(stocks)
 	if err != nil {
 		return err
 	}
 
-	inserted := ormRes.RowsReturned()
 	if inserted < len(stocks) {
 		return fmt.Errorf("Inserted %d is less than active stocks", inserted)
 	}
