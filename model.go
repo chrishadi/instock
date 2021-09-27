@@ -1,4 +1,4 @@
-package main
+package ingest
 
 type Stock struct {
 	Name              string  `json:"Name"`
@@ -15,6 +15,7 @@ type Stock struct {
 	Volume            float64 `json:"Volume"`
 	Frequency         float64 `json:"Frequency"`
 	Value             float64 `json:"Value"`
+	OneDay            float64 `json:"OneDay"`
 	LastUpdate        string  `json:"LastUpdate"`
 }
 
