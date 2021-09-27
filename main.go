@@ -25,15 +25,7 @@ type IngestionResult struct {
 func Ingest(ctx context.Context, m PubSubMessage) error {
 	bot := tbot.New(botHost, botToken, chatId)
 	sb := &strings.Builder{}
-	defer func() {
-		log.Print("Sending bot message...")
-		err := sendMessage(bot, sb.String())
-		if err != nil {
-			log.Print(err)
-		} else {
-			log.Print("Done")
-		}
-	}()
+	defer sendBufferToBot(sb, bot)
 
 	db := pg.Connect(&pgOpts)
 	defer db.Close()
@@ -54,20 +46,7 @@ func Ingest(ctx context.Context, m PubSubMessage) error {
 		}
 	}
 
-	lnew := len(res.New)
-	msg := fmt.Sprintf("Received: %d, Active: %d, Stale: %d, New: %d", res.received, len(res.Active), len(res.Stale), lnew)
-	logws(sb, msg)
-	if lnew > 0 {
-		codes := extractCodes(res.New)
-		logws(sb, strings.Join(codes, " "))
-	}
-
-	if len(res.TopGainers) > 0 {
-		logws(sb, "Gainers: "+strings.Join(res.TopGainers, " "))
-	}
-	if len(res.TopLosers) > 0 {
-		logws(sb, "Losers: "+strings.Join(res.TopLosers, " "))
-	}
+	logResult(res, sb)
 
 	return err
 }
@@ -142,6 +121,33 @@ func panicws(b *strings.Builder, v interface{}) {
 	s := fmt.Sprint(v)
 	b.WriteString(s)
 	log.Panic(s)
+}
+
+func logResult(res *IngestionResult, sb *strings.Builder) {
+	lnew := len(res.New)
+	msg := fmt.Sprintf("Received: %d, Active: %d, Stale: %d, New: %d", res.received, len(res.Active), len(res.Stale), lnew)
+	logws(sb, msg)
+	if lnew > 0 {
+		codes := extractCodes(res.New)
+		logws(sb, strings.Join(codes, " "))
+	}
+
+	if len(res.TopGainers) > 0 {
+		logws(sb, "Gainers: "+strings.Join(res.TopGainers, " "))
+	}
+	if len(res.TopLosers) > 0 {
+		logws(sb, "Losers: "+strings.Join(res.TopLosers, " "))
+	}
+}
+
+func sendBufferToBot(sb *strings.Builder, bot *tbot.Bot) {
+	log.Print("Sending bot message...")
+	err := sendMessage(bot, sb.String())
+	if err != nil {
+		log.Print(err)
+	} else {
+		log.Print("Done")
+	}
 }
 
 func sendMessage(bot *tbot.Bot, msg string) error {
