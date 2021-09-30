@@ -1,4 +1,4 @@
-package main
+package ingest
 
 import "github.com/go-pg/pg/v10"
 
@@ -6,7 +6,7 @@ var stockApiUrl = "https://api.example.com/v1/stocks/"
 
 var pgOpts pg.Options = pg.Options{
 	Addr:     "localhost:5432",
-	Database: "dbname",
+	Database: "instock",
 	Password: "dbpass",
 	User:     "dbuser",
 }

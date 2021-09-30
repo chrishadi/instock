@@ -39,6 +39,7 @@ CREATE TABLE public.stocks (
     volume numeric,
     frequency numeric,
     value numeric,
+    one_day numeric,
     last_update timestamp without time zone
 );
 
@@ -58,3 +59,5 @@ CREATE MATERIALIZED VIEW public.stock_last_updates AS
 --
 -- PostgreSQL database dump complete
 --
+
+REFRESH MATERIALIZED VIEW public.stock_last_updates;

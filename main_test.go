@@ -78,12 +78,12 @@ func TestIngestJsonGivenBadJsonShouldReturnError(t *testing.T) {
 	_, err := ingestJson(badJson, mockStockRepository{}, mockStockLastUpdateRepository{})
 
 	if err == nil {
-		t.Error("Expect error to be nil")
+		t.Error("Expect error not to be nil")
 	}
 }
 
 func TestIngestJsonWhenGetStockLastUpdatesFailShouldReturnError(t *testing.T) {
-	stockLastUpdateRepo := mockStockLastUpdateRepository{getError: errors.New("get-error")}
+	stockLastUpdateRepo := mockStockLastUpdateRepository{getError: errors.New("get-last-updates-error")}
 
 	_, err := ingestJson(stockJson, mockStockRepository{}, stockLastUpdateRepo)
 
@@ -93,7 +93,7 @@ func TestIngestJsonWhenGetStockLastUpdatesFailShouldReturnError(t *testing.T) {
 }
 
 func TestIngestJsonWhenInsertStocksFailShouldReturnError(t *testing.T) {
-	stockRepo := mockStockRepository{insertError: errors.New("insert-error")}
+	stockRepo := mockStockRepository{insertError: errors.New("insert-stocks-error")}
 
 	_, err := ingestJson(stockJson, stockRepo, mockStockLastUpdateRepository{})
 

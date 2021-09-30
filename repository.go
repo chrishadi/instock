@@ -36,6 +36,6 @@ func (repo PgStockLastUpdateRepository) Get() (updates []StockLastUpdate, err er
 }
 
 func (repo PgStockLastUpdateRepository) Refresh() error {
-	_, err := repo.db.Exec((*StockLastUpdate)(nil), "REFRESH MATERIALIZED VIEW ?TableName")
+	_, err := repo.db.Model((*StockLastUpdate)(nil)).Exec("REFRESH MATERIALIZED VIEW ?TableName")
 	return err
 }

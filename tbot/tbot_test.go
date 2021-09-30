@@ -33,10 +33,11 @@ func TestNewGivenNonEmptyTokenShouldReturnBot(t *testing.T) {
 }
 
 func TestNewGivenHostWithTrailingSlashShouldRemoveIt(t *testing.T) {
-	bot := New("host/", token, chatId)
+	host := "host.com"
+	bot := New(host+"/", token, chatId)
 
-	if bot.host != "host" {
-		t.Errorf("Expect host, got %s", bot.host)
+	if bot.host != host {
+		t.Errorf("Expect %s, got %s", host, bot.host)
 	}
 }
 
