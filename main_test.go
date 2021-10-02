@@ -132,10 +132,10 @@ func TestExtractCodesGivenStocksShouldReturnStockCodes(t *testing.T) {
 	}
 }
 
-func TestLogWsGivenAnErrorShouldWriteItsMessageToBuffer(t *testing.T) {
-	sb := strings.Builder{}
+func TestLogwbGivenAnErrorShouldWriteItsMessageToBuffer(t *testing.T) {
+	sb := &strings.Builder{}
 
-	logws(&sb, errors.New(oops))
+	logwb(errors.New(oops), sb)
 
 	expected := oops + "\n"
 	actual := sb.String()
@@ -145,14 +145,14 @@ func TestLogWsGivenAnErrorShouldWriteItsMessageToBuffer(t *testing.T) {
 	}
 }
 
-func TestPanicWsGivenAnErrorShouldWriteItsMessageToBuffer(t *testing.T) {
-	sb := strings.Builder{}
+func TestPanicwbGivenAnErrorShouldWriteItsMessageToBuffer(t *testing.T) {
+	sb := &strings.Builder{}
 
 	defer func() {
 		recover()
 	}()
 
-	panicws(&sb, errors.New(oops))
+	panicwb(errors.New(oops), sb)
 
 	expected := oops + "\n"
 	actual := sb.String()
@@ -173,7 +173,7 @@ func TestSendMessageGivenEmptyMessageShouldNotSendMessage(t *testing.T) {
 
 	bot := tbot.New(ts.URL, tbotToken, tbotChatId)
 
-	sendMessage(bot, "")
+	sendMessage("", bot)
 
 	if sent == true {
 		t.Error("Expect sent to be false, got true")
@@ -186,7 +186,7 @@ func TestSendMessageWhenFailShouldNotReturnNilError(t *testing.T) {
 
 	bot := tbot.New(ts.URL, tbotToken, tbotChatId)
 
-	err := sendMessage(bot, "bot-message")
+	err := sendMessage("bot-message", bot)
 
 	if err == nil {
 		t.Error("Expect error not to be nil, got nil")
@@ -201,7 +201,7 @@ func TestSendMessageWhenSuccessShouldReturnNilError(t *testing.T) {
 
 	bot := tbot.New(ts.URL, tbotToken, tbotChatId)
 
-	err := sendMessage(bot, "bot-message")
+	err := sendMessage("bot-message", bot)
 
 	if err != nil {
 		t.Error("Expect error to be nil, got", err)

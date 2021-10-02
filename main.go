@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/chrishadi/instock/common"
+	"github.com/chrishadi/instock/reader"
 	"github.com/chrishadi/instock/tbot"
 	"github.com/go-pg/pg/v10"
 )
@@ -25,14 +25,14 @@ type IngestionResult struct {
 func Ingest(ctx context.Context, m PubSubMessage) error {
 	bot := tbot.New(botHost, botToken, chatId)
 	sb := &strings.Builder{}
-	defer sendBufferToBot(sb, bot)
+	defer sendBufferedMessage(sb, bot)
 
 	db := pg.Connect(&pgOpts)
 	defer db.Close()
 
 	buf, err := getStockJsonFromApi(stockApiUrl)
 	if err != nil {
-		panicws(sb, err)
+		panicwb(err, sb)
 	}
 
 	stockRepo := PgStockRepository{db: db}
@@ -40,9 +40,9 @@ func Ingest(ctx context.Context, m PubSubMessage) error {
 	res, err := ingestJson(buf, stockRepo, stockLastUpdateRepo)
 	if err != nil {
 		if res == nil {
-			panicws(sb, err)
+			panicwb(err, sb)
 		} else {
-			logws(sb, err)
+			logwb(err, sb)
 		}
 	}
 
@@ -58,7 +58,7 @@ func getStockJsonFromApi(url string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 
-	return common.ReadResponse(resp)
+	return reader.ReadResponse(resp)
 }
 
 func ingestJson(buf []byte, stockRepo StockRepository, stockLastUpdateRepo StockLastUpdateRepository) (*IngestionResult, error) {
@@ -103,6 +103,23 @@ func insertStocks(stocks []Stock, repo StockRepository) error {
 	return nil
 }
 
+func logResult(res *IngestionResult, sb *strings.Builder) {
+	lnew := len(res.New)
+	msg := fmt.Sprintf("Received: %d, Active: %d, Stale: %d, New: %d", res.received, len(res.Active), len(res.Stale), lnew)
+	logwb(msg, sb)
+	if lnew > 0 {
+		codes := extractCodes(res.New)
+		logwb(strings.Join(codes, " "), sb)
+	}
+
+	if len(res.TopGainers) > 0 {
+		logwb("Gainers: "+strings.Join(res.TopGainers, " "), sb)
+	}
+	if len(res.TopLosers) > 0 {
+		logwb("Losers: "+strings.Join(res.TopLosers, " "), sb)
+	}
+}
+
 func extractCodes(stocks []Stock) []string {
 	res := make([]string, len(stocks))
 	for i, stock := range stocks {
@@ -111,38 +128,21 @@ func extractCodes(stocks []Stock) []string {
 	return res
 }
 
-func logws(b *strings.Builder, v interface{}) {
+func logwb(v interface{}, b *strings.Builder) {
 	s := fmt.Sprintln(v)
 	log.Print(s)
 	b.WriteString(s)
 }
 
-func panicws(b *strings.Builder, v interface{}) {
+func panicwb(v interface{}, b *strings.Builder) {
 	s := fmt.Sprint(v)
 	b.WriteString(s)
 	log.Panic(s)
 }
 
-func logResult(res *IngestionResult, sb *strings.Builder) {
-	lnew := len(res.New)
-	msg := fmt.Sprintf("Received: %d, Active: %d, Stale: %d, New: %d", res.received, len(res.Active), len(res.Stale), lnew)
-	logws(sb, msg)
-	if lnew > 0 {
-		codes := extractCodes(res.New)
-		logws(sb, strings.Join(codes, " "))
-	}
-
-	if len(res.TopGainers) > 0 {
-		logws(sb, "Gainers: "+strings.Join(res.TopGainers, " "))
-	}
-	if len(res.TopLosers) > 0 {
-		logws(sb, "Losers: "+strings.Join(res.TopLosers, " "))
-	}
-}
-
-func sendBufferToBot(sb *strings.Builder, bot *tbot.Bot) {
+func sendBufferedMessage(sb *strings.Builder, bot *tbot.Bot) {
 	log.Print("Sending bot message...")
-	err := sendMessage(bot, sb.String())
+	err := sendMessage(sb.String(), bot)
 	if err != nil {
 		log.Print(err)
 	} else {
@@ -150,7 +150,7 @@ func sendBufferToBot(sb *strings.Builder, bot *tbot.Bot) {
 	}
 }
 
-func sendMessage(bot *tbot.Bot, msg string) error {
+func sendMessage(msg string, bot *tbot.Bot) error {
 	if bot == nil || len(msg) == 0 {
 		return nil
 	}

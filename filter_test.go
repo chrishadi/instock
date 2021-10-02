@@ -91,13 +91,9 @@ func TestUpdateTopRankGivenNewElmIsSomewhereBetweenShouldInsertSomewhereBetween(
 
 	updateTopRank(ls, Stock{Code: "D", OneDay: -0.25}, func(a, b float64) bool { return a < b })
 
-	top := ls.Front().Value.(StockGain)
-	if top.Code != "A" {
-		t.Error("Expect A at the top, got", top)
-	}
-	bottom := ls.Back().Value.(StockGain)
-	if bottom.Code != "C" {
-		t.Error("Expect C at the bottom, got", bottom)
+	second := ls.Front().Next().Value.(StockGain)
+	if second.Code != "D" {
+		t.Error("Expect D at the second position, got", second)
 	}
 }
 
@@ -110,7 +106,7 @@ func TestUpdateTopRankGivenNewElmIsLessThanLastElmShouldInsertAtTheBottom(t *tes
 
 	bottom := ls.Back().Value.(StockGain)
 	if bottom.Code != "C" {
-		t.Error("Expect C at the top, got", bottom)
+		t.Error("Expect C at the bottom, got", bottom)
 	}
 }
 

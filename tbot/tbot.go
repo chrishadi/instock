@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/chrishadi/instock/common"
+	"github.com/chrishadi/instock/reader"
 )
 
 type Bot struct {
@@ -48,7 +48,7 @@ func (bot Bot) SendMessage(text string) error {
 	resp, err := http.Post(url, "application/json", body)
 	if err == nil {
 		defer resp.Body.Close()
-		_, err = common.ReadResponse(resp)
+		_, err = reader.ReadResponse(resp)
 	}
 
 	return err
