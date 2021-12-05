@@ -23,8 +23,3 @@ type StockLastUpdate struct {
 	Code       string `json:"Code"`
 	LastUpdate string `json:"LastUpdate"`
 }
-
-type StockGain struct {
-	Code string
-	Gain float64
-}

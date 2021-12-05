@@ -3,6 +3,8 @@ package ingest
 import (
 	"container/list"
 	"time"
+
+	"github.com/chrishadi/instock/toplist"
 )
 
 type AggregateResult struct {
@@ -12,6 +14,14 @@ type AggregateResult struct {
 	TopGainers []string
 	TopLosers  []string
 }
+
+type StockGain struct {
+	Code string
+	Gain float64
+}
+
+func moreGain(a, b interface{}) bool { return a.(StockGain).Gain > b.(StockGain).Gain }
+func moreLoss(a, b interface{}) bool { return a.(StockGain).Gain < b.(StockGain).Gain }
 
 func aggregate(newStocks []Stock, stockLastUpdates []StockLastUpdate, numOfGL int) (*AggregateResult, error) {
 	var res AggregateResult
@@ -31,8 +41,8 @@ func aggregate(newStocks []Stock, stockLastUpdates []StockLastUpdate, numOfGL in
 		lastUpdateMap[stock.Code] = stock.LastUpdate
 	}
 
-	topGainers := list.New()
-	topLosers := list.New()
+	topGainers := toplist.New(numOfGL, moreGain)
+	topLosers := toplist.New(numOfGL, moreLoss)
 
 	for _, stock := range newStocks {
 		lastUpdate, exist := lastUpdateMap[stock.Code]
@@ -62,39 +72,16 @@ func aggregate(newStocks []Stock, stockLastUpdates []StockLastUpdate, numOfGL in
 			continue
 		}
 		if gain > 0.0 {
-			if topGainers.Len() < numOfGL || gain > topGainers.Back().Value.(StockGain).Gain {
-				updateTopRank(topGainers, stock, func(a, b float64) bool { return a > b }, numOfGL)
-			}
+			topGainers.Add(StockGain{stock.Code, stock.OneDay})
 		} else {
-			if topLosers.Len() < numOfGL || gain < topLosers.Back().Value.(StockGain).Gain {
-				updateTopRank(topLosers, stock, func(a, b float64) bool { return a < b }, numOfGL)
-			}
+			topLosers.Add(StockGain{stock.Code, stock.OneDay})
 		}
 	}
 
-	res.TopGainers = extractTopRankCodes(topGainers)
-	res.TopLosers = extractTopRankCodes(topLosers)
+	res.TopGainers = extractTopRankCodes(topGainers.Elements())
+	res.TopLosers = extractTopRankCodes(topLosers.Elements())
 
 	return &res, nil
-}
-
-func updateTopRank(tr *list.List, stock Stock, greater func(a, b float64) bool, limit int) {
-	gain := stock.OneDay
-	obj := StockGain{stock.Code, gain}
-
-	if tr.Len() == 0 || greater(gain, tr.Front().Value.(StockGain).Gain) {
-		tr.PushFront(obj)
-	} else {
-		e := tr.Back()
-		for greater(gain, e.Value.(StockGain).Gain) {
-			e = e.Prev()
-		}
-		tr.InsertAfter(obj, e)
-	}
-
-	if tr.Len() > limit {
-		tr.Remove(tr.Back())
-	}
 }
 
 func extractTopRankCodes(ls *list.List) []string {
