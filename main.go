@@ -11,7 +11,26 @@ import (
 	"github.com/chrishadi/instock/reader"
 	"github.com/chrishadi/instock/tbot"
 	"github.com/go-pg/pg/v10"
+	"github.com/kelseyhightower/envconfig"
 )
+
+type Config struct {
+	StockApiUrl string `required:"true" split_words:"true"`
+	Pg          struct {
+		Network      string
+		Addr         string
+		Database     string `required:"true"`
+		TestDatabase string `split_words:"true"`
+		User         string `required:"true"`
+		Password     string `required:"true"`
+	}
+	Bot struct {
+		Host   string
+		Token  string
+		ChatId int `split_words:"true"`
+	}
+	NumOfGL int `required:"true" envconfig:"num_of_gl" split_words:"true"`
+}
 
 type PubSubMessage struct {
 	Data []byte `json:"data"`
@@ -23,21 +42,34 @@ type IngestionResult struct {
 }
 
 func Ingest(ctx context.Context, m PubSubMessage) error {
-	bot := tbot.New(botHost, botToken, chatId)
+	var cfg Config
+	err := envconfig.Process("", &cfg)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	bot := tbot.New(cfg.Bot.Host, cfg.Bot.Token, cfg.Bot.ChatId)
 	sb := &strings.Builder{}
 	defer sendBufferedMessage(sb, bot)
 
+	pgOpts := pg.Options{
+		Network:  cfg.Pg.Network,
+		Addr:     cfg.Pg.Addr,
+		Database: cfg.Pg.Database,
+		User:     cfg.Pg.User,
+		Password: cfg.Pg.Password,
+	}
 	db := pg.Connect(&pgOpts)
 	defer db.Close()
 
-	buf, err := getStockJsonFromApi(stockApiUrl)
+	buf, err := getStockJsonFromApi(cfg.StockApiUrl)
 	if err != nil {
 		panicwb(err, sb)
 	}
 
 	stockRepo := PgStockRepository{db: db}
 	stockLastUpdateRepo := PgStockLastUpdateRepository{db: db}
-	res, err := ingestJson(buf, stockRepo, stockLastUpdateRepo)
+	res, err := ingestJson(buf, stockRepo, stockLastUpdateRepo, cfg.NumOfGL)
 	if err != nil {
 		if res == nil {
 			panicwb(err, sb)
@@ -61,7 +93,7 @@ func getStockJsonFromApi(url string) ([]byte, error) {
 	return reader.ReadResponse(resp)
 }
 
-func ingestJson(buf []byte, stockRepo StockRepository, stockLastUpdateRepo StockLastUpdateRepository) (*IngestionResult, error) {
+func ingestJson(buf []byte, stockRepo StockRepository, stockLastUpdateRepo StockLastUpdateRepository, numOfGL int) (*IngestionResult, error) {
 	var newStocks []Stock
 
 	err := json.Unmarshal(buf, &newStocks)
@@ -74,7 +106,7 @@ func ingestJson(buf []byte, stockRepo StockRepository, stockLastUpdateRepo Stock
 		return nil, err
 	}
 
-	facets, err := aggregate(newStocks, stockLastUpdates)
+	facets, err := aggregate(newStocks, stockLastUpdates, numOfGL)
 	if err != nil {
 		return nil, err
 	}

@@ -19,7 +19,7 @@ func TestAggregateWhenDBIsEmptyShouldReturnAllStocksAsNewAndActive(t *testing.T)
 		Active: []Stock{a, b, c},
 		New:    []Stock{a, b, c},
 	}
-	actual, err := aggregate(newStocks, lastUpdates)
+	actual, err := aggregate(newStocks, lastUpdates, numOfGL)
 
 	if err != nil {
 		t.Error(err)
@@ -46,7 +46,7 @@ func TestAggregateGivenNewActiveAndStaleStocksShouldSplitThem(t *testing.T) {
 		TopLosers:  []string{"E"},
 	}
 
-	actual, err := aggregate(newStocks, lastUpdates)
+	actual, err := aggregate(newStocks, lastUpdates, numOfGL)
 
 	if err != nil {
 		t.Error(err)
@@ -59,7 +59,7 @@ func TestAggregateGivenNewActiveAndStaleStocksShouldSplitThem(t *testing.T) {
 func TestUpdateTopRankGivenEmptyListAndNewStockShouldInsertTheStock(t *testing.T) {
 	ls := list.New()
 
-	updateTopRank(ls, Stock{Code: "A", OneDay: 1.0}, func(a, b float64) bool { return a > b })
+	updateTopRank(ls, Stock{Code: "A", OneDay: 1.0}, func(a, b float64) bool { return a > b }, numOfGL)
 
 	if ls.Len() != 1 {
 		t.Error("Expect list length to be 1, got", ls.Len())
@@ -75,7 +75,7 @@ func TestUpdateTopRankGivenNewStockGainIsGreaterThanTopShouldInsertAtTheTop(t *t
 	ls.PushBack(StockGain{"A", 3.0})
 	ls.PushBack(StockGain{"B", 2.0})
 
-	updateTopRank(ls, Stock{Code: "C", OneDay: 5.0}, func(a, b float64) bool { return a > b })
+	updateTopRank(ls, Stock{Code: "C", OneDay: 5.0}, func(a, b float64) bool { return a > b }, numOfGL)
 
 	top := ls.Front().Value.(StockGain)
 	if top.Code != "C" {
@@ -89,7 +89,7 @@ func TestUpdateTopRankGivenNewStockGainIsSomewhereBetweenShouldInsertSomewhereBe
 	ls.PushBack(StockGain{"B", -0.2})
 	ls.PushBack(StockGain{"C", -0.1})
 
-	updateTopRank(ls, Stock{Code: "D", OneDay: -0.25}, func(a, b float64) bool { return a < b })
+	updateTopRank(ls, Stock{Code: "D", OneDay: -0.25}, func(a, b float64) bool { return a < b }, numOfGL)
 
 	second := ls.Front().Next().Value.(StockGain)
 	if second.Code != "D" {
@@ -102,7 +102,7 @@ func TestUpdateTopRankGivenNewStockGainIsLessThanBottomShouldInsertAtTheBottom(t
 	ls.PushBack(StockGain{"A", 3.0})
 	ls.PushBack(StockGain{"B", 2.0})
 
-	updateTopRank(ls, Stock{Code: "C", OneDay: 1.0}, func(a, b float64) bool { return a > b })
+	updateTopRank(ls, Stock{Code: "C", OneDay: 1.0}, func(a, b float64) bool { return a > b }, numOfGL)
 
 	bottom := ls.Back().Value.(StockGain)
 	if bottom.Code != "C" {
@@ -111,8 +111,6 @@ func TestUpdateTopRankGivenNewStockGainIsLessThanBottomShouldInsertAtTheBottom(t
 }
 
 func TestUpdateTopRankGivenTheListIsFullAndNewStockGainIsGreaterThanSomeShouldRemoveLast(t *testing.T) {
-	_numOfGL := numOfGL
-	numOfGL = 5
 	ls := list.New()
 	ls.PushBack(StockGain{"A", 3.0})
 	ls.PushBack(StockGain{"B", 2.7})
@@ -120,17 +118,16 @@ func TestUpdateTopRankGivenTheListIsFullAndNewStockGainIsGreaterThanSomeShouldRe
 	ls.PushBack(StockGain{"D", 1.3})
 	ls.PushBack(StockGain{"E", 1.0})
 
-	updateTopRank(ls, Stock{Code: "F", OneDay: 1.5}, func(a, b float64) bool { return a > b })
+	f := Stock{Code: "F", OneDay: 1.5}
+	updateTopRank(ls, f, func(a, b float64) bool { return a > b }, numOfGL)
 
 	if ls.Len() != numOfGL {
-		t.Error("Expect list len to be 5, got", ls.Len())
+		t.Errorf("Expect list len to be %d, got %d", numOfGL, ls.Len())
 	}
 	bottom := ls.Back().Value.(StockGain)
 	if bottom.Code != "D" {
 		t.Error("Expect D at the bottom, got", bottom)
 	}
-
-	numOfGL = _numOfGL
 }
 
 func TestExtractTopRankCodesGivenListOfStockGainShouldReturnStockCodes(t *testing.T) {

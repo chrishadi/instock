@@ -13,7 +13,7 @@ type AggregateResult struct {
 	TopLosers  []string
 }
 
-func aggregate(newStocks []Stock, stockLastUpdates []StockLastUpdate) (*AggregateResult, error) {
+func aggregate(newStocks []Stock, stockLastUpdates []StockLastUpdate, numOfGL int) (*AggregateResult, error) {
 	var res AggregateResult
 
 	if len(stockLastUpdates) == 0 {
@@ -63,11 +63,11 @@ func aggregate(newStocks []Stock, stockLastUpdates []StockLastUpdate) (*Aggregat
 		}
 		if gain > 0.0 {
 			if topGainers.Len() < numOfGL || gain > topGainers.Back().Value.(StockGain).Gain {
-				updateTopRank(topGainers, stock, func(a, b float64) bool { return a > b })
+				updateTopRank(topGainers, stock, func(a, b float64) bool { return a > b }, numOfGL)
 			}
 		} else {
 			if topLosers.Len() < numOfGL || gain < topLosers.Back().Value.(StockGain).Gain {
-				updateTopRank(topLosers, stock, func(a, b float64) bool { return a < b })
+				updateTopRank(topLosers, stock, func(a, b float64) bool { return a < b }, numOfGL)
 			}
 		}
 	}
@@ -78,7 +78,7 @@ func aggregate(newStocks []Stock, stockLastUpdates []StockLastUpdate) (*Aggregat
 	return &res, nil
 }
 
-func updateTopRank(tr *list.List, stock Stock, greater func(a, b float64) bool) {
+func updateTopRank(tr *list.List, stock Stock, greater func(a, b float64) bool, limit int) {
 	gain := stock.OneDay
 	obj := StockGain{stock.Code, gain}
 
@@ -92,7 +92,7 @@ func updateTopRank(tr *list.List, stock Stock, greater func(a, b float64) bool) 
 		tr.InsertAfter(obj, e)
 	}
 
-	if tr.Len() > numOfGL {
+	if tr.Len() > limit {
 		tr.Remove(tr.Back())
 	}
 }

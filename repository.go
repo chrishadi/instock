@@ -1,8 +1,6 @@
 package ingest
 
-import (
-	"github.com/go-pg/pg/v10"
-)
+import "github.com/go-pg/pg/v10"
 
 type StockRepository interface {
 	Insert([]Stock) (int, error)
@@ -23,7 +21,7 @@ func (repo PgStockRepository) Insert(stocks []Stock) (int, error) {
 		return 0, err
 	}
 
-	return ormResult.RowsReturned(), nil
+	return ormResult.RowsAffected(), nil
 }
 
 type PgStockLastUpdateRepository struct {
