@@ -37,7 +37,7 @@ func (bot Bot) apiUrlFor(command string) string {
 
 func (bot Bot) SendMessage(text string) error {
 	if len(text) == 0 {
-		return errors.New("Not sending empty message.")
+		return errors.New("not sending empty message")
 	}
 
 	url := bot.apiUrlFor("sendMessage")

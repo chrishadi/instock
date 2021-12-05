@@ -11,15 +11,15 @@ var b = Stock{Code: "B", LastUpdate: "2020-02-02T00:00:00", OneDay: 0.5}
 var c = Stock{Code: "C", LastUpdate: "2020-02-03T00:00:00", OneDay: 0.0}
 var e = Stock{Code: "E", LastUpdate: "2020-02-03T00:00:00", OneDay: -0.5}
 
-func TestFilterGivenEmptyDBShouldReturnAllStocksAsNewAndActive(t *testing.T) {
+func TestAggregateWhenDBIsEmptyShouldReturnAllStocksAsNewAndActive(t *testing.T) {
 	lastUpdates := []StockLastUpdate{}
 	newStocks := []Stock{a, b, c}
 
-	expected := &FilterResult{
+	expected := &AggregateResult{
 		Active: []Stock{a, b, c},
 		New:    []Stock{a, b, c},
 	}
-	actual, err := filter(newStocks, lastUpdates)
+	actual, err := aggregate(newStocks, lastUpdates)
 
 	if err != nil {
 		t.Error(err)
@@ -29,7 +29,7 @@ func TestFilterGivenEmptyDBShouldReturnAllStocksAsNewAndActive(t *testing.T) {
 	}
 }
 
-func TestFilterGivenNewActiveAndStaleStocksShouldSplitThem(t *testing.T) {
+func TestAggregateGivenNewActiveAndStaleStocksShouldSplitThem(t *testing.T) {
 	alu := StockLastUpdate{Code: "A", LastUpdate: "2020-02-02 00:00:00"}
 	blu := StockLastUpdate{Code: "B", LastUpdate: "2020-02-02 00:00:00"}
 	dlu := StockLastUpdate{Code: "D", LastUpdate: "2020-02-02 00:00:00"}
@@ -38,7 +38,7 @@ func TestFilterGivenNewActiveAndStaleStocksShouldSplitThem(t *testing.T) {
 	lastUpdates := []StockLastUpdate{alu, blu, dlu, elu}
 	newStocks := []Stock{a, b, c, e}
 
-	expected := &FilterResult{
+	expected := &AggregateResult{
 		Active:     []Stock{a, c, e},
 		Stale:      []Stock{b},
 		New:        []Stock{c},
@@ -46,7 +46,7 @@ func TestFilterGivenNewActiveAndStaleStocksShouldSplitThem(t *testing.T) {
 		TopLosers:  []string{"E"},
 	}
 
-	actual, err := filter(newStocks, lastUpdates)
+	actual, err := aggregate(newStocks, lastUpdates)
 
 	if err != nil {
 		t.Error(err)
@@ -56,7 +56,7 @@ func TestFilterGivenNewActiveAndStaleStocksShouldSplitThem(t *testing.T) {
 	}
 }
 
-func TestUpdateTopRankGivenEmptyListShouldInsertNewElement(t *testing.T) {
+func TestUpdateTopRankGivenEmptyListAndNewStockShouldInsertTheStock(t *testing.T) {
 	ls := list.New()
 
 	updateTopRank(ls, Stock{Code: "A", OneDay: 1.0}, func(a, b float64) bool { return a > b })
@@ -70,7 +70,7 @@ func TestUpdateTopRankGivenEmptyListShouldInsertNewElement(t *testing.T) {
 	}
 }
 
-func TestUpdateTopRankGivenNewElmIsGreaterThanFirstElmShouldInsertAtTheTop(t *testing.T) {
+func TestUpdateTopRankGivenNewStockGainIsGreaterThanTopShouldInsertAtTheTop(t *testing.T) {
 	ls := list.New()
 	ls.PushBack(StockGain{"A", 3.0})
 	ls.PushBack(StockGain{"B", 2.0})
@@ -83,7 +83,7 @@ func TestUpdateTopRankGivenNewElmIsGreaterThanFirstElmShouldInsertAtTheTop(t *te
 	}
 }
 
-func TestUpdateTopRankGivenNewElmIsSomewhereBetweenShouldInsertSomewhereBetween(t *testing.T) {
+func TestUpdateTopRankGivenNewStockGainIsSomewhereBetweenShouldInsertSomewhereBetween(t *testing.T) {
 	ls := list.New()
 	ls.PushBack(StockGain{"A", -0.3})
 	ls.PushBack(StockGain{"B", -0.2})
@@ -93,11 +93,11 @@ func TestUpdateTopRankGivenNewElmIsSomewhereBetweenShouldInsertSomewhereBetween(
 
 	second := ls.Front().Next().Value.(StockGain)
 	if second.Code != "D" {
-		t.Error("Expect D at the second position, got", second)
+		t.Error("Expect D at second position, got", second)
 	}
 }
 
-func TestUpdateTopRankGivenNewElmIsLessThanLastElmShouldInsertAtTheBottom(t *testing.T) {
+func TestUpdateTopRankGivenNewStockGainIsLessThanBottomShouldInsertAtTheBottom(t *testing.T) {
 	ls := list.New()
 	ls.PushBack(StockGain{"A", 3.0})
 	ls.PushBack(StockGain{"B", 2.0})
@@ -110,7 +110,7 @@ func TestUpdateTopRankGivenNewElmIsLessThanLastElmShouldInsertAtTheBottom(t *tes
 	}
 }
 
-func TestUpdateTopRankGivenFullListShouldRemoveLastPosition(t *testing.T) {
+func TestUpdateTopRankGivenTheListIsFullAndNewStockGainIsGreaterThanSomeShouldRemoveLast(t *testing.T) {
 	_numOfGL := numOfGL
 	numOfGL = 5
 	ls := list.New()

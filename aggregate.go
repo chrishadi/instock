@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-type FilterResult struct {
+type AggregateResult struct {
 	Active     []Stock
 	New        []Stock
 	Stale      []Stock
@@ -13,8 +13,8 @@ type FilterResult struct {
 	TopLosers  []string
 }
 
-func filter(newStocks []Stock, stockLastUpdates []StockLastUpdate) (*FilterResult, error) {
-	var res FilterResult
+func aggregate(newStocks []Stock, stockLastUpdates []StockLastUpdate) (*AggregateResult, error) {
+	var res AggregateResult
 
 	if len(stockLastUpdates) == 0 {
 		res.Active = newStocks

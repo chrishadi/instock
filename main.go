@@ -19,7 +19,7 @@ type PubSubMessage struct {
 
 type IngestionResult struct {
 	received int
-	*FilterResult
+	*AggregateResult
 }
 
 func Ingest(ctx context.Context, m PubSubMessage) error {
@@ -74,12 +74,12 @@ func ingestJson(buf []byte, stockRepo StockRepository, stockLastUpdateRepo Stock
 		return nil, err
 	}
 
-	facets, err := filter(newStocks, stockLastUpdates)
+	facets, err := aggregate(newStocks, stockLastUpdates)
 	if err != nil {
 		return nil, err
 	}
 
-	res := IngestionResult{received: len(newStocks), FilterResult: facets}
+	res := IngestionResult{received: len(newStocks), AggregateResult: facets}
 	if len(res.Active) > 0 {
 		err = insertStocks(res.Active, stockRepo)
 		if err == nil {
