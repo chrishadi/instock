@@ -1,0 +1,49 @@
+name: Go
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.13
+
+    - name: Build
+      run: go build -v ./...
+
+    - name: Test
+      run: |
+        psql postgresql://postgres:postgres@localhost:5432/postgres < instock.sql
+        go test -v ./...
+      env:
+        STOCK_API_URL: https://api.example.com
+        PG_ADDR: >-
+          localhost:5432
+        PG_DATABASE: postgres
+        PG_TEST_DATABASE: postgres
+        PG_PASSWORD: postgres
+        PG_USER: postgres
+        NUM_OF_GL: 5
