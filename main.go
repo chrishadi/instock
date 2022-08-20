@@ -64,17 +64,16 @@ func Ingest(ctx context.Context, m PubSubMessage) error {
 
 	buf, err := getStockJsonFromApi(cfg.StockApiUrl)
 	if err != nil {
-		panicwb(err, sb)
+		logwb(err, sb)
 	}
 
 	stockRepo := PgStockRepository{db: db}
 	stockLastUpdateRepo := PgStockLastUpdateRepository{db: db}
 	res, err := ingestJson(buf, stockRepo, stockLastUpdateRepo, cfg.NumOfGL)
 	if err != nil {
+		logwb(err, sb)
 		if res == nil {
-			panicwb(err, sb)
-		} else {
-			logwb(err, sb)
+			return err
 		}
 	}
 
@@ -164,12 +163,6 @@ func logwb(v interface{}, b *strings.Builder) {
 	s := fmt.Sprintln(v)
 	log.Print(s)
 	b.WriteString(s)
-}
-
-func panicwb(v interface{}, b *strings.Builder) {
-	s := fmt.Sprint(v)
-	b.WriteString(s)
-	log.Panic(s)
 }
 
 func sendBufferedMessage(sb *strings.Builder, bot *tbot.Bot) {

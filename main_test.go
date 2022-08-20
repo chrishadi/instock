@@ -150,23 +150,6 @@ func TestLogwbGivenAnErrorShouldWriteItsMessageToBuffer(t *testing.T) {
 	}
 }
 
-func TestPanicwbGivenAnErrorShouldWriteItsMessageToBuffer(t *testing.T) {
-	sb := &strings.Builder{}
-
-	defer func() {
-		recover()
-	}()
-
-	panicwb(errors.New(oops), sb)
-
-	expected := oops + "\n"
-	actual := sb.String()
-
-	if actual != expected {
-		t.Errorf("Expect %s, got %s", expected, actual)
-	}
-}
-
 func TestSendMessageGivenEmptyMessageShouldNotSendMessage(t *testing.T) {
 	sent := false
 
@@ -251,6 +234,8 @@ func cleanUpDb() {
 		User:     cfg.Pg.User,
 		Password: cfg.Pg.Password,
 	})
+	defer db.Close()
+
 	db.Model((*Stock)(nil)).Exec("TRUNCATE ?TableName RESTART IDENTITY")
 	db.Model((*StockLastUpdate)(nil)).Exec("REFRESH MATERIALIZED VIEW ?TableName")
 }

@@ -1,2 +1,4 @@
 *.sql.gz
 *.env
+.DS_Store
+.vscode
