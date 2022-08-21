@@ -29,7 +29,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v2
       with:
-        go-version: 1.13
+        go-version: 1.16
 
     - name: Build
       run: go build -v ./...
@@ -46,4 +46,4 @@ jobs:
         PG_TEST_DATABASE: postgres
         PG_PASSWORD: postgres
         PG_USER: postgres
-        NUM_OF_GL: 5
+        NUM_OF_TOP_RANK: 5

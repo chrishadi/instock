@@ -1,7 +1,7 @@
 Ingest stock api data into PostgreSQL DB.
 
 ### Requirements ###
-- Go 1.13
+- Go 1.16
 - Postgresql 12
 - Telegram Bot API Token (optional)
 
