@@ -1,29 +1,16 @@
 package ingest
 
 import (
-	"container/list"
 	"time"
-
-	"github.com/chrishadi/instock/toplist"
 )
 
 type AggregateResult struct {
-	Active     []Stock
-	New        []Stock
-	Stale      []Stock
-	TopGainers []string
-	TopLosers  []string
+	Active []Stock
+	New    []Stock
+	Stale  []Stock
 }
 
-type StockGain struct {
-	Code string
-	Gain float64
-}
-
-func moreGain(a, b interface{}) bool { return a.(StockGain).Gain > b.(StockGain).Gain }
-func moreLoss(a, b interface{}) bool { return a.(StockGain).Gain < b.(StockGain).Gain }
-
-func aggregate(newStocks []Stock, stockLastUpdates []StockLastUpdate, numOfGL int) (*AggregateResult, error) {
+func aggregate(newStocks []Stock, stockLastUpdates []StockLastUpdate) (*AggregateResult, error) {
 	var res AggregateResult
 
 	if len(stockLastUpdates) == 0 {
@@ -41,9 +28,6 @@ func aggregate(newStocks []Stock, stockLastUpdates []StockLastUpdate, numOfGL in
 		lastUpdateMap[stock.Code] = stock.LastUpdate
 	}
 
-	topGainers := toplist.New(numOfGL, moreGain)
-	topLosers := toplist.New(numOfGL, moreLoss)
-
 	for _, stock := range newStocks {
 		lastUpdate, exist := lastUpdateMap[stock.Code]
 		if exist {
@@ -57,37 +41,16 @@ func aggregate(newStocks []Stock, stockLastUpdates []StockLastUpdate, numOfGL in
 				return &res, err
 			}
 
-			if !updatedAt.After(last) {
+			if updatedAt.After(last) {
+				res.Active = append(res.Active, stock)
+			} else {
 				res.Stale = append(res.Stale, stock)
-				continue
 			}
 		} else {
 			res.New = append(res.New, stock)
-		}
-
-		res.Active = append(res.Active, stock)
-
-		gain := stock.OneDay
-		if gain == 0.0 {
-			continue
-		}
-		if gain > 0.0 {
-			topGainers.Add(StockGain{stock.Code, stock.OneDay})
-		} else {
-			topLosers.Add(StockGain{stock.Code, stock.OneDay})
+			res.Active = append(res.Active, stock)
 		}
 	}
-
-	res.TopGainers = extractTopRankCodes(topGainers.Elements())
-	res.TopLosers = extractTopRankCodes(topLosers.Elements())
 
 	return &res, nil
-}
-
-func extractTopRankCodes(ls *list.List) []string {
-	codes := make([]string, 0, ls.Len())
-	for e := ls.Front(); e != nil; e = e.Next() {
-		codes = append(codes, e.Value.(StockGain).Code)
-	}
-	return codes
 }

@@ -11,11 +11,11 @@ type StockLastUpdateRepository interface {
 	Refresh() error
 }
 
-type PgStockRepository struct {
+type PGStockRepository struct {
 	db *pg.DB
 }
 
-func (repo PgStockRepository) Insert(stocks []Stock) (int, error) {
+func (repo PGStockRepository) Insert(stocks []Stock) (int, error) {
 	ormResult, err := repo.db.Model(&stocks).Insert()
 	if err != nil {
 		return 0, err
@@ -24,16 +24,16 @@ func (repo PgStockRepository) Insert(stocks []Stock) (int, error) {
 	return ormResult.RowsAffected(), nil
 }
 
-type PgStockLastUpdateRepository struct {
+type PGStockLastUpdateRepository struct {
 	db *pg.DB
 }
 
-func (repo PgStockLastUpdateRepository) Get() (updates []StockLastUpdate, err error) {
+func (repo PGStockLastUpdateRepository) Get() (updates []StockLastUpdate, err error) {
 	err = repo.db.Model(&updates).Select()
 	return updates, err
 }
 
-func (repo PgStockLastUpdateRepository) Refresh() error {
+func (repo PGStockLastUpdateRepository) Refresh() error {
 	_, err := repo.db.Model((*StockLastUpdate)(nil)).Exec("REFRESH MATERIALIZED VIEW ?TableName")
 	return err
 }
