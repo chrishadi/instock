@@ -140,6 +140,27 @@ func TestSendMessageWhenSuccessShouldReturnNilError(t *testing.T) {
 }
 
 func TestIngest(t *testing.T) {
+	testDBName := os.Getenv("PG_TEST_DATABASE")
+	if len(testDBName) == 0 {
+		t.Skip("this test requires PG_TEST_DATABASE env var to be specified")
+	}
+
+	db, err := connectTestDB(testDBName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if err = setUpDB(db); err != nil {
+		t.Fatal(err)
+	}
+	defer cleanUpDB(db)
+
+	const dbNameKey = "PG_DATABASE"
+	dbName := os.Getenv(dbNameKey)
+	os.Setenv(dbNameKey, testDBName)
+	defer os.Setenv(dbNameKey, dbName)
+
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write(stockJson)
 	}))
@@ -149,36 +170,49 @@ func TestIngest(t *testing.T) {
 	os.Setenv(stockApiUrlKey, ts.URL)
 	defer os.Setenv(stockApiUrlKey, stockApiUrl)
 
-	const dbNameKey = "PG_DATABASE"
-	testDBName := os.Getenv("PG_TEST_DATABASE")
-	if len(testDBName) > 0 {
-		dbName := os.Getenv(dbNameKey)
-		os.Setenv(dbNameKey, testDBName)
-		defer os.Setenv(dbNameKey, dbName)
-		defer cleanUpDB()
-	}
-
-	err := Ingest(context.Background(), PubSubMessage{})
+	err = Ingest(context.Background(), PubSubMessage{})
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	repo := PGStockLastUpdateRepository{db: db}
+	updates, err := repo.Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expected := []StockLastUpdate{{Code: "A", LastUpdate: "2021-10-25 00:00:00"}}
+	if !reflect.DeepEqual(expected, updates) {
+		t.Errorf("Expect '%+v', got '%+v'", expected, updates)
+	}
 }
 
-func cleanUpDB() {
+func connectTestDB(dbName string) (*pg.DB, error) {
 	var cfg Config
 	err := envconfig.Process("", &cfg)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	db := pg.Connect(&pg.Options{
+	return pg.Connect(&pg.Options{
 		Addr:     cfg.PG.Addr,
-		Database: cfg.PG.Database,
+		Database: dbName,
 		User:     cfg.PG.User,
 		Password: cfg.PG.Password,
-	})
-	defer db.Close()
+	}), nil
+}
 
+func setUpDB(db *pg.DB) error {
+	sqlBlob, err := os.ReadFile("instock.sql")
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Model((*Stock)(nil)).Exec(string(sqlBlob))
+	return err
+}
+
+func cleanUpDB(db *pg.DB) {
 	db.Model((*Stock)(nil)).Exec("TRUNCATE ?TableName RESTART IDENTITY")
 	db.Model((*StockLastUpdate)(nil)).Exec("REFRESH MATERIALIZED VIEW ?TableName")
 }

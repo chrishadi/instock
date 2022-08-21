@@ -2,29 +2,11 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 12.6
--- Dumped by pg_dump version 12.6
-
-SET statement_timeout = 0;
-SET lock_timeout = 0;
-SET idle_in_transaction_session_timeout = 0;
-SET client_encoding = 'UTF8';
-SET standard_conforming_strings = on;
-SELECT pg_catalog.set_config('search_path', '', false);
-SET check_function_bodies = false;
-SET xmloption = content;
-SET client_min_messages = warning;
-SET row_security = off;
-
-SET default_tablespace = '';
-
-SET default_table_access_method = heap;
-
 --
 -- Name: stocks; Type: TABLE; Schema: public
 --
 
-CREATE TABLE public.stocks (
+CREATE TABLE IF NOT EXISTS public.stocks (
     name character varying,
     code character varying,
     sub_sector_id integer,
@@ -49,7 +31,7 @@ CREATE INDEX ON public.stocks (code);
 -- Name: stock_last_updates; Type: MATERIALIZED VIEW; Schema: public
 --
 
-CREATE MATERIALIZED VIEW public.stock_last_updates AS
+CREATE MATERIALIZED VIEW IF NOT EXISTS public.stock_last_updates AS
  SELECT stocks.code,
     max(stocks.last_update) AS last_update
    FROM public.stocks
