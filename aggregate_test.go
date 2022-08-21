@@ -1,7 +1,6 @@
 package ingest
 
 import (
-	"container/list"
 	"reflect"
 	"testing"
 )
@@ -19,7 +18,7 @@ func TestAggregateWhenDBIsEmptyShouldReturnAllStocksAsNewAndActive(t *testing.T)
 		Active: []Stock{a, b, c},
 		New:    []Stock{a, b, c},
 	}
-	actual, err := aggregate(newStocks, lastUpdates, numOfGL)
+	actual, err := aggregate(newStocks, lastUpdates)
 
 	if err != nil {
 		t.Error(err)
@@ -39,33 +38,17 @@ func TestAggregateGivenNewActiveAndStaleStocksShouldSplitThem(t *testing.T) {
 	newStocks := []Stock{a, b, c, e}
 
 	expected := &AggregateResult{
-		Active:     []Stock{a, c, e},
-		Stale:      []Stock{b},
-		New:        []Stock{c},
-		TopGainers: []string{"A"},
-		TopLosers:  []string{"E"},
+		Active: []Stock{a, c, e},
+		Stale:  []Stock{b},
+		New:    []Stock{c},
 	}
 
-	actual, err := aggregate(newStocks, lastUpdates, numOfGL)
+	actual, err := aggregate(newStocks, lastUpdates)
 
 	if err != nil {
 		t.Error(err)
 	}
 	if !reflect.DeepEqual(actual, expected) {
 		t.Errorf("\n%v\nis not equal to\n%v", actual, expected)
-	}
-}
-
-func TestExtractTopRankCodesGivenListOfStockGainShouldReturnStockCodes(t *testing.T) {
-	ls := list.New()
-	ls.PushBack(StockGain{"A", 3.0})
-	ls.PushBack(StockGain{"B", 2.0})
-	ls.PushBack(StockGain{"C", 1.0})
-	expected := []string{"A", "B", "C"}
-
-	actual := extractTopRankCodes(ls)
-
-	if !reflect.DeepEqual(actual, expected) {
-		t.Errorf("Expect %v, got %v", expected, actual)
 	}
 }

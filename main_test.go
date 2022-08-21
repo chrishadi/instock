@@ -1,6 +1,7 @@
 package ingest
 
 import (
+	"container/list"
 	"context"
 	"errors"
 	"net/http"
@@ -54,78 +55,6 @@ func TestGetStockJsonFromApiWhenSuccessShouldReturnJsonAndNilError(t *testing.T)
 	}
 }
 
-type mockStockRepository struct {
-	inserted    int
-	insertError error
-}
-
-func (mock mockStockRepository) Insert(stocks []Stock) (int, error) {
-	return mock.inserted, mock.insertError
-}
-
-type mockStockLastUpdateRepository struct {
-	getResult    []StockLastUpdate
-	getError     error
-	refreshError error
-}
-
-func (mock mockStockLastUpdateRepository) Get() ([]StockLastUpdate, error) {
-	return mock.getResult, mock.getError
-}
-
-func (mock mockStockLastUpdateRepository) Refresh() error {
-	return mock.refreshError
-}
-
-func TestIngestJsonGivenBadJsonShouldReturnError(t *testing.T) {
-	badJson := []byte("bad-json")
-
-	_, err := ingestJson(badJson, mockStockRepository{}, mockStockLastUpdateRepository{}, numOfGL)
-
-	if err == nil {
-		t.Error("Expect error not to be nil")
-	}
-}
-
-func TestIngestJsonWhenGetStockLastUpdatesFailShouldReturnError(t *testing.T) {
-	stockLastUpdateRepo := mockStockLastUpdateRepository{getError: errors.New("get-last-updates-error")}
-
-	_, err := ingestJson(stockJson, mockStockRepository{}, stockLastUpdateRepo, numOfGL)
-
-	if err == nil {
-		t.Error("Expect error not to be nil")
-	}
-}
-
-func TestIngestJsonWhenInsertStocksFailShouldReturnError(t *testing.T) {
-	stockRepo := mockStockRepository{insertError: errors.New("insert-stocks-error")}
-
-	_, err := ingestJson(stockJson, stockRepo, mockStockLastUpdateRepository{}, numOfGL)
-
-	if err == nil {
-		t.Error("Expect error not to be nil")
-	}
-}
-
-func TestIngestJsonWhenRefreshStockLastUpdatesFailShouldReturnError(t *testing.T) {
-	stockLastUpdateRepo := mockStockLastUpdateRepository{refreshError: errors.New("refresh-mv-error")}
-
-	_, err := ingestJson(stockJson, mockStockRepository{}, stockLastUpdateRepo, numOfGL)
-
-	if err == nil {
-		t.Error("Expect error not to be nil")
-	}
-}
-
-func TestIngestJsonWhenSuccessShouldReturnNilError(t *testing.T) {
-	stockRepo := mockStockRepository{inserted: 1}
-	_, err := ingestJson(stockJson, stockRepo, mockStockLastUpdateRepository{}, numOfGL)
-
-	if err != nil {
-		t.Error("Expect error to be nil, got", err)
-	}
-}
-
 func TestExtractCodesGivenStocksShouldReturnStockCodes(t *testing.T) {
 	stocks := []Stock{{Code: "A"}, {Code: "B"}}
 	expected := []string{"A", "B"}
@@ -134,6 +63,20 @@ func TestExtractCodesGivenStocksShouldReturnStockCodes(t *testing.T) {
 
 	if !reflect.DeepEqual(actual, expected) {
 		t.Errorf("Expect %#v, got %#v", expected, actual)
+	}
+}
+
+func TestExtractTopRankCodesGivenListOfStockGainShouldReturnStockCodes(t *testing.T) {
+	ls := list.New()
+	ls.PushBack(StockGain{"A", 3.0})
+	ls.PushBack(StockGain{"B", 2.0})
+	ls.PushBack(StockGain{"C", 1.0})
+	expected := []string{"A", "B", "C"}
+
+	actual := extractTopRankCodes(ls)
+
+	if !reflect.DeepEqual(actual, expected) {
+		t.Errorf("Expect %v, got %v", expected, actual)
 	}
 }
 
@@ -207,12 +150,12 @@ func TestIngest(t *testing.T) {
 	defer os.Setenv(stockApiUrlKey, stockApiUrl)
 
 	const dbNameKey = "PG_DATABASE"
-	testDbName := os.Getenv("PG_TEST_DATABASE")
-	if len(testDbName) > 0 {
+	testDBName := os.Getenv("PG_TEST_DATABASE")
+	if len(testDBName) > 0 {
 		dbName := os.Getenv(dbNameKey)
-		os.Setenv(dbNameKey, testDbName)
+		os.Setenv(dbNameKey, testDBName)
 		defer os.Setenv(dbNameKey, dbName)
-		defer cleanUpDb()
+		defer cleanUpDB()
 	}
 
 	err := Ingest(context.Background(), PubSubMessage{})
@@ -221,7 +164,7 @@ func TestIngest(t *testing.T) {
 	}
 }
 
-func cleanUpDb() {
+func cleanUpDB() {
 	var cfg Config
 	err := envconfig.Process("", &cfg)
 	if err != nil {
@@ -229,10 +172,10 @@ func cleanUpDb() {
 	}
 
 	db := pg.Connect(&pg.Options{
-		Addr:     cfg.Pg.Addr,
-		Database: cfg.Pg.Database,
-		User:     cfg.Pg.User,
-		Password: cfg.Pg.Password,
+		Addr:     cfg.PG.Addr,
+		Database: cfg.PG.Database,
+		User:     cfg.PG.User,
+		Password: cfg.PG.Password,
 	})
 	defer db.Close()
 

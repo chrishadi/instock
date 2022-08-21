@@ -9,10 +9,6 @@ const size = 5
 var more = func(a, b interface{}) bool { return a.(int) > b.(int) }
 var less = func(a, b interface{}) bool { return a.(int) < b.(int) }
 
-func TestEmpty(t *testing.T) {
-	t.Skip()
-}
-
 func TestAddGivenNewValueWhenListIsNotFullShouldInsertTheValue(t *testing.T) {
 	tl := New(size, more)
 
@@ -85,7 +81,7 @@ func TestAddGivenNewValueIsSomewhereBetweenShouldInsertSomewhereBetween(t *testi
 	}
 }
 
-func TestAddGivenNewStockGainIsGreaterThanSomeWhenListIsFullShouldRemoveLast(t *testing.T) {
+func TestAddGivenNewValueIsGreaterThanSomeWhenListIsFullShouldRemoveLast(t *testing.T) {
 	tl := New(size, more)
 	tl.Add(110)
 	tl.Add(109)

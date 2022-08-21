@@ -1,6 +1,7 @@
 package ingest
 
 import (
+	"container/list"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,13 +11,14 @@ import (
 
 	"github.com/chrishadi/instock/reader"
 	"github.com/chrishadi/instock/tbot"
+	"github.com/chrishadi/instock/toplist"
 	"github.com/go-pg/pg/v10"
 	"github.com/kelseyhightower/envconfig"
 )
 
 type Config struct {
 	StockApiUrl string `required:"true" split_words:"true"`
-	Pg          struct {
+	PG          struct {
 		Network      string
 		Addr         string
 		Database     string `required:"true"`
@@ -29,35 +31,43 @@ type Config struct {
 		Token  string
 		ChatId int `split_words:"true"`
 	}
-	NumOfGL int `required:"true" envconfig:"num_of_gl" split_words:"true"`
+	NumOfTopRank int `required:"true" split_words:"true"`
 }
 
 type PubSubMessage struct {
 	Data []byte `json:"data"`
 }
 
-type IngestionResult struct {
+type StockGain struct {
+	Code string
+	Gain float64
+}
+
+type report struct {
 	received int
-	*AggregateResult
+	active   int
+	stale    int
+	new      []string
+	gainers  []string
+	losers   []string
 }
 
 func Ingest(ctx context.Context, m PubSubMessage) error {
 	var cfg Config
-	err := envconfig.Process("", &cfg)
-	if err != nil {
+	if err := envconfig.Process("", &cfg); err != nil {
 		log.Panic(err)
 	}
 
 	bot := tbot.New(cfg.Bot.Host, cfg.Bot.Token, cfg.Bot.ChatId)
 	sb := &strings.Builder{}
-	defer sendBufferedMessage(sb, bot)
+	defer sendBufferToBot(sb, bot)
 
 	pgOpts := pg.Options{
-		Network:  cfg.Pg.Network,
-		Addr:     cfg.Pg.Addr,
-		Database: cfg.Pg.Database,
-		User:     cfg.Pg.User,
-		Password: cfg.Pg.Password,
+		Network:  cfg.PG.Network,
+		Addr:     cfg.PG.Addr,
+		Database: cfg.PG.Database,
+		User:     cfg.PG.User,
+		Password: cfg.PG.Password,
 	}
 	db := pg.Connect(&pgOpts)
 	defer db.Close()
@@ -67,19 +77,46 @@ func Ingest(ctx context.Context, m PubSubMessage) error {
 		logwb(err, sb)
 	}
 
-	stockRepo := PgStockRepository{db: db}
-	stockLastUpdateRepo := PgStockLastUpdateRepository{db: db}
-	res, err := ingestJson(buf, stockRepo, stockLastUpdateRepo, cfg.NumOfGL)
-	if err != nil {
+	var stocks []Stock
+	if err = json.Unmarshal(buf, &stocks); err != nil {
 		logwb(err, sb)
-		if res == nil {
-			return err
-		}
+		return err
 	}
 
-	logResult(res, sb)
+	stockLastUpdateRepo := PGStockLastUpdateRepository{db: db}
+	stockLastUpdates, err := stockLastUpdateRepo.Get()
+	if err != nil {
+		logwb(err, sb)
+		return err
+	}
 
-	return err
+	facets, err := aggregate(stocks, stockLastUpdates)
+	if err != nil {
+		return err
+	}
+
+	var gainers, losers []string
+
+	if len(facets.Active) > 0 {
+		stockRepo := PGStockRepository{db: db}
+		if err = ingestStocks(facets.Active, stockRepo, stockLastUpdateRepo); err != nil {
+			logwb(err, sb)
+		}
+
+		gainers, losers = getTopStockCodes(facets.Active, cfg.NumOfTopRank)
+	}
+
+	rep := &report{
+		received: len(stocks),
+		active:   len(facets.Active),
+		stale:    len(facets.Stale),
+		new:      extractCodes(facets.New),
+		gainers:  gainers,
+		losers:   losers,
+	}
+	logReport(rep, sb)
+
+	return nil
 }
 
 func getStockJsonFromApi(url string) ([]byte, error) {
@@ -92,33 +129,12 @@ func getStockJsonFromApi(url string) ([]byte, error) {
 	return reader.ReadResponse(resp)
 }
 
-func ingestJson(buf []byte, stockRepo StockRepository, stockLastUpdateRepo StockLastUpdateRepository, numOfGL int) (*IngestionResult, error) {
-	var newStocks []Stock
-
-	err := json.Unmarshal(buf, &newStocks)
-	if err != nil {
-		return nil, err
+func ingestStocks(stocks []Stock, repo StockRepository, mv StockLastUpdateRepository) error {
+	if err := insertStocks(stocks, repo); err != nil {
+		return err
 	}
 
-	stockLastUpdates, err := stockLastUpdateRepo.Get()
-	if err != nil {
-		return nil, err
-	}
-
-	facets, err := aggregate(newStocks, stockLastUpdates, numOfGL)
-	if err != nil {
-		return nil, err
-	}
-
-	res := IngestionResult{received: len(newStocks), AggregateResult: facets}
-	if len(res.Active) > 0 {
-		err = insertStocks(res.Active, stockRepo)
-		if err == nil {
-			err = stockLastUpdateRepo.Refresh()
-		}
-	}
-
-	return &res, err
+	return mv.Refresh()
 }
 
 func insertStocks(stocks []Stock, repo StockRepository) error {
@@ -128,27 +144,47 @@ func insertStocks(stocks []Stock, repo StockRepository) error {
 	}
 
 	if inserted < len(stocks) {
-		return fmt.Errorf("Inserted %d is less than active stocks", inserted)
+		return fmt.Errorf("number of inserted %d is less than active stocks", inserted)
 	}
 
 	return nil
 }
 
-func logResult(res *IngestionResult, sb *strings.Builder) {
-	lnew := len(res.New)
-	msg := fmt.Sprintf("Received: %d, Active: %d, Stale: %d, New: %d", res.received, len(res.Active), len(res.Stale), lnew)
-	logwb(msg, sb)
-	if lnew > 0 {
-		codes := extractCodes(res.New)
-		logwb(strings.Join(codes, " "), sb)
+func getTopStockCodes(stocks []Stock, n int) ([]string, []string) {
+	gainers := toplist.New(n, func(a, b interface{}) bool {
+		return a.(StockGain).Gain > b.(StockGain).Gain
+	})
+	losers := toplist.New(n, func(a, b interface{}) bool {
+		return a.(StockGain).Gain < b.(StockGain).Gain
+	})
+
+	for _, stock := range stocks {
+		gain := stock.OneDay
+		if gain == 0.0 {
+			continue
+		}
+
+		var list *toplist.TopList
+		if gain > 0.0 {
+			list = gainers
+		} else {
+			list = losers
+		}
+		list.Add(StockGain{stock.Code, stock.OneDay})
 	}
 
-	if len(res.TopGainers) > 0 {
-		logwb("Gainers: "+strings.Join(res.TopGainers, " "), sb)
+	gainerCodes := extractTopRankCodes(gainers.Elements())
+	loserCodes := extractTopRankCodes(losers.Elements())
+
+	return gainerCodes, loserCodes
+}
+
+func extractTopRankCodes(ls *list.List) []string {
+	codes := make([]string, 0, ls.Len())
+	for e := ls.Front(); e != nil; e = e.Next() {
+		codes = append(codes, e.Value.(StockGain).Code)
 	}
-	if len(res.TopLosers) > 0 {
-		logwb("Losers: "+strings.Join(res.TopLosers, " "), sb)
-	}
+	return codes
 }
 
 func extractCodes(stocks []Stock) []string {
@@ -159,13 +195,29 @@ func extractCodes(stocks []Stock) []string {
 	return res
 }
 
+func logReport(rep *report, sb *strings.Builder) {
+	new := len(rep.new)
+	msg := fmt.Sprintf("Received: %d, Active: %d, Stale: %d, New: %d", rep.received, rep.active, rep.stale, new)
+	logwb(msg, sb)
+	if new > 0 {
+		logwb(strings.Join(rep.new, " "), sb)
+	}
+
+	if len(rep.gainers) > 0 {
+		logwb("Gainers: "+strings.Join(rep.gainers, " "), sb)
+	}
+	if len(rep.losers) > 0 {
+		logwb("Losers: "+strings.Join(rep.losers, " "), sb)
+	}
+}
+
 func logwb(v interface{}, b *strings.Builder) {
 	s := fmt.Sprintln(v)
 	log.Print(s)
 	b.WriteString(s)
 }
 
-func sendBufferedMessage(sb *strings.Builder, bot *tbot.Bot) {
+func sendBufferToBot(sb *strings.Builder, bot *tbot.Bot) {
 	log.Print("Sending bot message...")
 	err := sendMessage(sb.String(), bot)
 	if err != nil {
